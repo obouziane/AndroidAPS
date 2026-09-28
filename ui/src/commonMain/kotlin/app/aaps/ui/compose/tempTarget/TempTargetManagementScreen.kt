@@ -545,7 +545,7 @@ fun TempTargetManagementScreen(
                                     IconButton(onClick = { viewModel.addNewPreset() }) {
                                         Icon(
                                             imageVector = Icons.Filled.Add,
-                                            contentDescription = "Add preset"
+                                            contentDescription = stringResource(CoreUiStrings.add)
                                         )
                                     }
                                     // Revert button (only for fixed presets when editor values differ from defaults)

@@ -949,7 +949,7 @@ class ImportExportPrefsImpl(
         }
     }
 
-    override fun executeImport(prefs: Prefs, keepPumpSettings: Boolean): ImportExportPrefs.ImportOutcome {
+    override suspend fun executeImport(prefs: Prefs, keepPumpSettings: Boolean): ImportExportPrefs.ImportOutcome {
         activePlugin.beforeImport()
         stageDatabaseRestoreFromCompanionBackup()
         val outcome = applier.apply(prefs, keepPumpSettings)
