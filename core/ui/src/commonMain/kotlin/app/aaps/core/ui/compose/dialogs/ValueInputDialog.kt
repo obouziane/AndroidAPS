@@ -81,7 +81,6 @@ fun ValueInputDialog(
     val errorInvalidNumber = stringResource(CoreUiStrings.invalid_number)
     val errorOutOfRange = stringResource(InterfacesStrings.confirmation_line, stringResource(CoreUiStrings.error), rangeText)
 
-    // The three messages below are still hardcoded English: no matching string resource exists yet.
     fun validateAndParse(): Double? {
         val text = textFieldValue.text.replace(",", ".")
         return try {
