@@ -502,8 +502,10 @@ fun GlucoseChart(
             // Y range in user units, from the visible readings/predictions plus the target marks.
             val visibleValues = sorted.map { it.value } +
                 visiblePredictions.sliceByMillis(viewportStartMillis, viewportEndMillis) { it.timestamp }.map { it.value }
-            val yMin = (visibleValues.minOrNull() ?: lowMark).coerceAtMost(lowMark)
-            val yMax = (visibleValues.maxOrNull() ?: highMark).coerceAtLeast(highMark)
+            val defaultYMin = 0.75f * lowMark
+            val defaultYMax = 1.25f * highMark
+            val yMin = (visibleValues.minOrNull() ?: lowMark).coerceAtMost(lowMark).coerceAtMost(defaultYMin)
+            val yMax = (visibleValues.maxOrNull() ?: highMark).coerceAtLeast(highMark).coerceAtLeast(defaultYMax)
             val ySpan = (yMax - yMin).coerceAtLeast(0.1)
 
             fun xFor(millis: Long): Float =
