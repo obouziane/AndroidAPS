@@ -583,16 +583,6 @@ class MainApp : Application(), MetroMemberInjector, MetroViewModelFactoryOwner, 
         if (preferences.getIfExists(BooleanKey.GeneralSimpleMode) == null)
             preferences.put(BooleanKey.GeneralSimpleMode, true)
 
-        // Seeds simple mode for an install that predates the key.
-        //
-        // NOT a migration and deliberately not in the list above: it invents a value rather than moving
-        // one, and `simple_mode` feeds PreferencesImpl.calculatedDefaultValue, so a wrong guess changes
-        // the effective value of a whole family of settings. Skipped on a client, which adopts the
-        // value from the master via sync - a local put here would trigger a client→master round-trip
-        // (modal) at startup. The master seeds and publishes; the client follows.
-        if (!config.AAPSCLIENT && preferences.getIfExists(BooleanKey.GeneralSimpleMode) == null)
-            preferences.put(BooleanKey.GeneralSimpleMode, !preferences.get(BooleanNonKey.GeneralSetupWizardProcessed))
-
         val keys: Map<String, *> = sp.getAll()
         // Harvest the DIA each old profile was using, for the database migration in dataMigrations().
         //
