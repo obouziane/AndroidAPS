@@ -22,15 +22,10 @@ import org.mockito.kotlin.whenever
  *
  * ## Why this is in `:app`
  *
- * Most destinations are named through their key enum, so the compiler checks them. Two are not:
- * `Objectives_started_` and `Objectives_accomplished_` are written as literals, because
- * `ObjectivesLongComposedKey` lives in `:plugins:constraints` and `:implementation` cannot depend on
- * it - and moving plugin keys into `:core:keys` so a migration can name them would fill that module
- * with other modules' keys, one migration at a time.
- *
- * The price of a literal is that a rename breaks it silently: the migration keeps running, keeps
- * finding its legacy names, and writes them where nothing reads. No compile error, no failing test
- * near it. That is not hypothetical - the `OpenAPSSMBDynamicISFPlugin` migration wrote
+ * Most destinations are named through their key enum, so the compiler checks them. A migration
+ * can also write a literal name, which may stop resolving after a feature is removed. No compile
+ * error or failing test near the migration would catch it. That is not hypothetical - the
+ * `OpenAPSSMBDynamicISFPlugin` migration wrote
  * `ConfigBuilder_APS_OpenAPSSMB_Enabled` while `ConfigBuilderImpl` composed `APS_OpenAPSSMBPlugin`,
  * and did nothing at all from January 2024 until somebody read it.
  *
@@ -59,16 +54,13 @@ class PreferenceMigrationRoundTripTest {
     /**
      * One legacy name per rename, spelled the way the version that wrote it spelled it.
      *
-     * Verified against tag `3.3.2.1`: `ProfilePlugin.storeSettings` wrote `LocalProfile_<i>_<field>`,
-     * `ConfigBuilderPlugin` wrote `"ConfigBuilder_" + type.name + "_" + p.javaClass.simpleName + "_Enabled"`,
-     * and `Objective` wrote `"Objectives_" + spName + "_started"`.
+     * Verified against tag `3.3.2.1`: `ProfilePlugin.storeSettings` wrote `LocalProfile_<i>_<field>`
+     * and `ConfigBuilderPlugin` wrote `"ConfigBuilder_" + type.name + "_" + p.javaClass.simpleName + "_Enabled"`.
      */
     private val legacyStore = mapOf<String, Any?>(
         "Monitor_Overview_total" to 42L,
         "Monitor_Overview_resumed" to 42L,
         "Monitor_Overview_start" to 42L,
-        "Objectives_config_started" to 42L,
-        "Objectives_config_accomplished" to 42L,
         "ConfigBuilder_PUMP_VirtualPumpPlugin_Enabled" to true,
         "appwidget_use_black_0" to true,
         "LocalProfile_0_name" to "Adult",

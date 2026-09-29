@@ -36,7 +36,7 @@ import dev.zacsweers.metro.Inject
  * next start then converted them. It is not enough now: `PreferenceImportApplier` resolves each name
  * from the file and drops the ones it does not know, so an old backup's names never reach the store
  * for the start-up pass to find. The user loses their profiles, their plugin selection, their
- * objectives and their loop mode.
+ * loop mode.
  *
  * Taking the store as a parameter is the whole change. Start up passes the real store; an import
  * passes one built over the file. Same functions, same order, one copy of the rules - which matters
@@ -111,7 +111,6 @@ class PreferenceMigrations(
         smsOtpPassword(sp)
         activityMonitor(sp)
         widgetUseBlack(sp)
-        objectives(sp)
         configBuilder(sp)
         localProfile(sp)
         insulinPlugins(sp)
@@ -304,27 +303,6 @@ class PreferenceMigrations(
                 sp.putBoolean(BooleanComposedKey.WidgetUseBlack.composeKey(id.toInt()), useBlack)
                 sp.remove(name)
             }
-        }
-    }
-
-    /**
-     * `Objectives_<name>_started` becomes `Objectives_started_<name>`.
-     *
-     * The destinations are written as literal names because `ObjectivesLongComposedKey` lives in
-     * `:plugins:constraints`, which `:implementation` cannot depend on - and moving plugin keys into
-     * `:core:keys` so a migration can name them would fill that module with other modules' keys, one
-     * migration at a time. `PreferenceMigrationRoundTripTest` in `:app`, where every module is visible,
-     * asserts these names still resolve.
-     */
-    private fun objectives(sp: KeyValueStore) {
-        sp.getAll().forEach { (name, value) ->
-            if (!name.startsWith("Objectives_")) return@forEach
-            val destination = when {
-                name.endsWith("_started")      -> "Objectives_started_"
-                name.endsWith("_accomplished") -> "Objectives_accomplished_"
-                else                           -> return@forEach
-            }
-            moveLong(sp, name, value, name.split("_").getOrNull(1), destination)
         }
     }
 

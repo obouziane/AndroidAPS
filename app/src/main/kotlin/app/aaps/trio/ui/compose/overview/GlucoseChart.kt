@@ -37,6 +37,7 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -65,6 +66,7 @@ import app.aaps.core.interfaces.overview.graph.GraphDataPoint
 import app.aaps.core.ui.compose.AapsSpacing
 import app.aaps.core.ui.compose.AapsTheme
 import app.aaps.core.ui.compose.LocalDateUtil
+import app.aaps.core.ui.R as CoreUiR
 import app.aaps.ui.compose.overview.graphs.GraphViewModel
 import app.aaps.ui.compose.overview.graphs.allPoints
 import app.aaps.ui.R
@@ -222,6 +224,12 @@ fun GlucoseChart(
     val cobPointsAsc = remember(cobData) { cobData.cob.sortedBy(GraphDataPoint::timestamp) }
     val targetPointsAsc = remember(targetLine) { targetLine.targets.sortedBy(GraphDataPoint::timestamp) }
     val basalCeiling = remember(basal) { basal.maxBasal.coerceAtLeast(0.1) }
+    val activeProfileBasalRate = remember(basal, nowTimestamp) {
+        basal.profileBasal
+            .takeIf { it.size >= 2 && it.last().timestamp >= nowTimestamp }
+            ?.lastOrNull { it.timestamp <= nowTimestamp }
+            ?.value
+    }
 
     val density = LocalDensity.current
     val dateUtil = LocalDateUtil.current
@@ -256,6 +264,10 @@ fun GlucoseChart(
             maximumFractionDigits = 1
         }
     }
+    val profileBasalLabel = activeProfileBasalRate?.let {
+        stringResource(CoreUiR.string.pump_base_basal_rate_dynamic, numberFormat.format(it))
+    }
+    val basalLabelBackground = MaterialTheme.colorScheme.surfaceVariant
 
     fun rangeColor(range: BgRange): Color = when (range) {
         BgRange.HIGH     -> highColor
@@ -588,15 +600,11 @@ fun GlucoseChart(
 
             // Basal strip: 0 U/hr at the top, filled area grows downward.
             val visibleBasal = basalSegments.sliceByMillis(viewportStartMillis, viewportEndMillis) { it.timestamp }
+            fun basalYFor(rate: Double): Float =
+                ((rate / basalCeiling).coerceIn(0.0, 1.0) * basalStripPx).toFloat()
+
             if (visibleBasal.size >= 2) {
                 val stripTop = 0f
-                val stripBottom = basalStripPx
-
-                fun basalYFor(rate: Double): Float {
-                    val fraction = (rate / basalCeiling).coerceIn(0.0, 1.0)
-                    return stripTop + (fraction * (stripBottom - stripTop)).toFloat()
-                }
-
                 val fillPath = Path()
                 val linePath = Path()
                 visibleBasal.forEachIndexed { index, point ->
@@ -620,6 +628,33 @@ fun GlucoseChart(
                 fillPath.close()
                 drawPath(fillPath, color = basalColor.copy(alpha = 0.3f))
                 drawPath(linePath, color = basalColor, style = Stroke(width = 1.5.dp.toPx()))
+            }
+
+            if (activeProfileBasalRate != null && profileBasalLabel != null) {
+                val y = basalYFor(activeProfileBasalRate)
+                val label = textMeasurer.measure(
+                    profileBasalLabel,
+                    style = TextStyle(fontSize = 11.sp, color = basalColor)
+                )
+                val padding = AapsSpacing.small.toPx()
+                val labelWidth = label.size.width + 2 * padding
+                val labelHeight = label.size.height + 2 * padding
+                val labelLeft = (size.width - labelWidth).coerceAtLeast(0f)
+                val labelTop = (y - labelHeight / 2).coerceIn(0f, (basalStripPx - labelHeight).coerceAtLeast(0f))
+                drawLine(
+                    color = basalColor,
+                    start = Offset(leftGutter, y),
+                    end = Offset(labelLeft, y),
+                    strokeWidth = 1.5.dp.toPx(),
+                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(4.dp.toPx(), 3.dp.toPx())),
+                )
+                drawRoundRect(
+                    color = basalLabelBackground,
+                    topLeft = Offset(labelLeft, labelTop),
+                    size = Size(labelWidth, labelHeight),
+                    cornerRadius = CornerRadius(AapsSpacing.medium.toPx()),
+                )
+                drawText(label, topLeft = Offset(labelLeft + padding, labelTop + padding))
             }
 
             // Predictions (forecast) as dashed lines per type.
@@ -807,10 +842,12 @@ fun GlucoseChart(
             )
         }
 
-        // Info button overlaid at the top-end of the graph.
+        // Info button overlaid at the bottom-end of the graph.
         IconButton(
             onClick = { showPredictionInfo = true },
-            modifier = Modifier.align(Alignment.TopEnd),
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(bottom = AapsSpacing.extraLarge),
         ) {
             Icon(
                 imageVector = Icons.Outlined.Info,

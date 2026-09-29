@@ -60,13 +60,15 @@ class PreferenceMigrationsTest {
         assertThat(store.contains("Monitor_Overview_total")).isFalse()
     }
 
-    @Test fun `objectives progress is renamed`() = runTest {
+    @Test fun `legacy objectives progress is left untouched when objectives are unavailable`() = runTest {
         val store = storeOf("Objectives_config_started" to 1L, "Objectives_config_accomplished" to 2L)
 
         sut().migrate(store)
 
-        assertThat(store.getLong("Objectives_started_config", 0L)).isEqualTo(1L)
-        assertThat(store.getLong("Objectives_accomplished_config", 0L)).isEqualTo(2L)
+        assertThat(store.getAll()).containsExactly(
+            "Objectives_config_started", 1L,
+            "Objectives_config_accomplished", 2L
+        )
     }
 
     @Test fun `plugin selection is renamed and the visibility flag is dropped`() = runTest {
@@ -214,7 +216,6 @@ class PreferenceMigrationsTest {
     @Test fun `native values and their text form migrate identically`() = runTest {
         val native = mapOf<String, Any?>(
             "Monitor_Overview_total" to 42L,
-            "Objectives_config_started" to 1_700_000_000_000L,
             "ConfigBuilder_PUMP_DanaRSPlugin_Enabled" to true,
             "appwidget_use_black_0" to false,
             "LocalProfile_0_mgdl" to true,
