@@ -179,6 +179,7 @@ fun NavGraphBuilder.appNavGraph(
         topBarActions: @Composable RowScope.() -> Unit,
         content: @Composable (PaddingValues) -> Unit
     ) -> Unit,
+    aboutDialog: (@Composable (onDismiss: () -> Unit) -> Unit)? = null,
     maintenanceViewModel: MaintenanceViewModel? = null,
     onMaintenanceDirectoryClick: () -> Unit = {},
     onMaintenanceRecreateActivity: () -> Unit = {},
@@ -720,13 +721,14 @@ fun NavGraphBuilder.appNavGraph(
     }
 
     composable(AppRoute.TrioSettings.route) {
-            trioTabScaffold(
-                TrioNavTab.Settings,
-                stringResource(CoreUiStrings.settings),
-                true,
-                {
-                    VersionOverlay()
-                }
+        var showAboutDialog by rememberSaveable { mutableStateOf(false) }
+        trioTabScaffold(
+            TrioNavTab.Settings,
+            stringResource(CoreUiStrings.settings),
+            true,
+            {
+                VersionOverlay()
+            }
         ) { paddingValues ->
             AllPreferencesScreen(
                 activePlugin = activePlugin,
@@ -742,8 +744,12 @@ fun NavGraphBuilder.appNavGraph(
                 onConfigurationClick = {
                     navController.navigate(AppRoute.Configuration.route)
                 },
-                onMaintenanceClick = maintenanceViewModel?.let { { navController.navigate(AppRoute.Maintenance.route) } }
+                onMaintenanceClick = maintenanceViewModel?.let { { navController.navigate(AppRoute.Maintenance.route) } },
+                onAboutClick = aboutDialog?.let { { showAboutDialog = true } }
             )
+        }
+        if (showAboutDialog) {
+            aboutDialog?.invoke { showAboutDialog = false }
         }
     }
 

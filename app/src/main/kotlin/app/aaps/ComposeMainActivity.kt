@@ -98,6 +98,7 @@ import app.aaps.plugins.automation.AutomationRuntime
 import app.aaps.plugins.source.DexcomPlugin
 import app.aaps.plugins.source.activities.RequestDexcomPermissionActivity
 import app.aaps.trio.TrioUi
+import app.aaps.ui.compose.aboutDialog.AboutBottomSheet
 import app.aaps.ui.compose.careDialog.CareportalEventType
 import app.aaps.ui.compose.clientcontrol.ClientControlPendingDialog
 import app.aaps.ui.compose.configuration.ConfigurationViewModel
@@ -582,6 +583,15 @@ class ComposeMainActivity : MetroAppCompatActivity() {
                 onRefreshPermissions = { permissionsViewModel.refresh() },
                 onExecuteQuickWizard = { guid -> mainViewModel.executeQuickWizard(guid) },
                 onNavigateToTrioTab = { tab -> navigateToTrioTab(tab, navController) },
+                aboutDialog = { onDismiss ->
+                    AboutBottomSheet(
+                        data = mainViewModel.buildAboutDialogData(getString(R.string.app_name)),
+                        onDismiss = onDismiss,
+                        onOpenBatteryHelp = if (mainViewModel.showBatteryHelp) {
+                            { mainViewModel.openBatteryHelp() }
+                        } else null
+                    )
+                },
                 trioTabScaffold = { selectedTab, title, showTopBar, topBarActions, content ->
                     trioUi.tabScaffold(
                         selectedTab = selectedTab,

@@ -79,7 +79,8 @@ fun AllPreferencesScreen(
     showTopBar: Boolean = true,
     showSimpleModeHiddenPreferences: Boolean = false,
     onConfigurationClick: (() -> Unit)? = null,
-    onMaintenanceClick: (() -> Unit)? = null
+    onMaintenanceClick: (() -> Unit)? = null,
+    onAboutClick: (() -> Unit)? = null
 ) {
     val preferences = LocalPreferences.current
     val config = LocalConfig.current
@@ -226,6 +227,19 @@ fun AllPreferencesScreen(
                             Preference(
                                 title = { Text(stringResource(CoreUiStrings.nav_configuration)) },
                                 summary = { Text(stringResource(CoreUiStrings.nav_configuration_desc)) },
+                                onClick = onClick
+                            )
+                        }
+                        item {
+                            HorizontalDivider()
+                        }
+                    }
+
+                    onAboutClick?.let { onClick ->
+                        item {
+                            Preference(
+                                title = { Text(stringResource(CoreUiStrings.nav_about)) },
+                                summary = { Text(stringResource(CoreUiStrings.nav_about_desc)) },
                                 onClick = onClick
                             )
                         }

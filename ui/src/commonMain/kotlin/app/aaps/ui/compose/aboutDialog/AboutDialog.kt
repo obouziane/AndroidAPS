@@ -4,15 +4,21 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -56,8 +62,6 @@ fun AboutAlertDialog(
     onOpenBatteryHelp: (() -> Unit)?,
     onDismiss: () -> Unit
 ) {
-    val annotatedMessage = buildClickableMessage(data.message)
-
     AlertDialog(
         onDismissRequest = onDismiss,
         icon = {
@@ -70,35 +74,7 @@ fun AboutAlertDialog(
                 textAlign = TextAlign.Center
             )
         },
-        text = {
-            Column(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Text(
-                    text = annotatedMessage,
-                    style = MaterialTheme.typography.bodyMedium,
-                    modifier = Modifier.fillMaxWidth(),
-                    textAlign = TextAlign.Center
-                )
-                if (data.enabledOptions.isNotEmpty()) {
-                    FlowRow(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(top = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(0.dp, Alignment.CenterHorizontally),
-                        verticalArrangement = Arrangement.spacedBy((-4).dp),
-                    ) {
-                        data.enabledOptions.forEach { option ->
-                            AssistChip(
-                                onClick = {},
-                                label = { Text(option.filename, style = MaterialTheme.typography.labelSmall) }
-                            )
-                        }
-                    }
-                }
-            }
-        },
+        text = { AboutMessage(data) },
         confirmButton = {
             TextButton(onClick = onDismiss) {
                 Text(stringResource(CoreUiStrings.ok))
@@ -113,6 +89,75 @@ fun AboutAlertDialog(
         },
         properties = DialogProperties(dismissOnBackPress = true, dismissOnClickOutside = true)
     )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun AboutBottomSheet(
+    data: AboutDialogData,
+    onOpenBatteryHelp: (() -> Unit)?,
+    onDismiss: () -> Unit
+) {
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+        containerColor = MaterialTheme.colorScheme.surface
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            LocalAppIcon.current(Modifier.size(48.dp))
+            Text(text = data.title, style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center)
+            AboutMessage(data)
+            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                onOpenBatteryHelp?.let { openHelp ->
+                    TextButton(onClick = openHelp) {
+                        Text(stringResource(CoreUiStrings.cta_dont_kill_my_app_info))
+                    }
+                }
+                TextButton(onClick = onDismiss) {
+                    Text(stringResource(CoreUiStrings.ok))
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun AboutMessage(data: AboutDialogData) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = buildClickableMessage(data.message),
+            style = MaterialTheme.typography.bodyMedium,
+            modifier = Modifier.fillMaxWidth(),
+            textAlign = TextAlign.Center
+        )
+        if (data.enabledOptions.isNotEmpty()) {
+            FlowRow(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp),
+                horizontalArrangement = Arrangement.spacedBy(0.dp, Alignment.CenterHorizontally),
+                verticalArrangement = Arrangement.spacedBy((-4).dp),
+            ) {
+                data.enabledOptions.forEach { option ->
+                    AssistChip(
+                        onClick = {},
+                        label = { Text(option.filename, style = MaterialTheme.typography.labelSmall) }
+                    )
+                }
+            }
+        }
+    }
 }
 
 @Composable
