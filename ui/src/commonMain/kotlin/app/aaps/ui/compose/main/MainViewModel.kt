@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import app.aaps.core.data.configuration.Constants
 import app.aaps.core.data.iob.InMemoryGlucoseValue
 import app.aaps.core.data.model.ActiveSceneState
+import app.aaps.core.data.model.GV
 import app.aaps.core.data.model.RM
 import app.aaps.core.data.model.SceneLifecycle
 import app.aaps.core.data.model.TE
@@ -51,6 +52,7 @@ import app.aaps.core.interfaces.pump.PumpTimeRemaining
 import app.aaps.core.interfaces.pump.defs.determineCorrectBolusStepSize
 import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.core.interfaces.rx.bus.RxBus
+import app.aaps.core.interfaces.rx.events.EventConfigBuilderChange
 import app.aaps.core.interfaces.rx.events.EventLoopUpdateGui
 import app.aaps.core.interfaces.rx.events.EventPumpStatusChanged
 import app.aaps.core.interfaces.rx.events.EventQueueChanged
@@ -117,11 +119,14 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.stateIn
@@ -169,25 +174,72 @@ class MainViewModel(
     private val appScope: CoroutineScope
 ) : ViewModel() {
 
+    /**
+     * Asks [sensorInfo] to read the sensor data again. A counter in a StateFlow, not an event, so a
+     * request made before [sensorInfo] starts to listen is not lost.
+     */
+    private val sensorInfoRefresh = MutableStateFlow(0)
+
+    /**
+     * Sensor data for the sensor info sheet.
+     *
+     * The first read waits for the app to finish start up, because the active BG source is not known
+     * before that. After that it reads again when the data behind it changes: a new sensor change
+     * event, a new BG reading (the sensor battery comes with it), a cleared database or a new BG
+     * source. It also reads again when the overview is shown (see [refreshSensorInfo]). The timer
+     * reads again for changes that send no event.
+     */
     val sensorInfo: StateFlow<SensorInfo> = flow {
-        while (true) {
+        config.initProgressFlow.first { it.done }
+        // sensorInfoRefresh is a StateFlow, so it gives the first read as soon as this starts.
+        emitAll(
+            merge(
+                persistenceLayer.observeChanges(TE::class),
+                persistenceLayer.observeChanges(GV::class),
+                persistenceLayer.databaseClearedFlow,
+                rxBus.toFlow(EventConfigBuilderChange::class),
+                sensorInfoRefresh,
+                flow {
+                    while (true) {
+                        delay(30_000L)
+                        emit(Unit)
+                    }
+                }
+            ).map { }
+        )
+    }
+        .conflate()
+        .mapNotNull { readSensorInfo() }
+        .stateIn(
+            viewModelScope,
+            SharingStarted.Eagerly,
+            SensorInfo()
+        )
+
+    /**
+     * Reads the sensor data now, for the sensor info sheet. The sheet calls this every time it opens,
+     * so it shows fresh data even if [sensorInfo] has not reached the screen yet. Returns null if the
+     * data cannot be read; the sheet then keeps what [sensorInfo] gives.
+     */
+    suspend fun loadSensorInfo(): SensorInfo? {
+        config.initProgressFlow.first { it.done }
+        return readSensorInfo()
+    }
+
+    private suspend fun readSensorInfo(): SensorInfo? =
+        try {
             val source = activePlugin.activeBgSource
-            val sourceName = (source as? PluginBase)?.name.orEmpty()
-            val sensorEvent = persistenceLayer.getLastTherapyRecordUpToNow(TE.Type.SENSOR_CHANGE)
-            emit(
-                SensorInfo(
-                    sourceName = sourceName,
-                    startedAt = sensorEvent?.timestamp,
-                    batteryLevel = source.sensorBatteryLevel
-                )
-            )
-            delay(30_000L)
+            SensorInfo(
+                sourceName = (source as? PluginBase)?.name.orEmpty(),
+                startedAt = persistenceLayer.getLastTherapyRecordUpToNow(TE.Type.SENSOR_CHANGE)?.timestamp,
+                batteryLevel = source.sensorBatteryLevel
+            ).also { aapsLogger.debug(LTag.BGSOURCE, "MainViewModel: Sensor info read: $it") }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            aapsLogger.error(LTag.UI, "MainViewModel: Failed to read sensor info", e)
+            null
         }
-    }.stateIn(
-        viewModelScope,
-        SharingStarted.Eagerly,
-        SensorInfo()
-    )
 
     // Event-driven state (drawer, dialogs, simple-mode preference). Imperative .update{} calls
     // from user actions and preference observers land here.
@@ -445,7 +497,13 @@ class MainViewModel(
         }
     }
 
+    /** Asks [sensorInfo] to read the sensor data again. */
+    fun refreshSensorInfo() {
+        sensorInfoRefresh.update { it + 1 }
+    }
+
     fun refreshOverviewState() {
+        refreshSensorInfo()
         overviewRefreshJob?.cancel()
         overviewRefreshJob = viewModelScope.launch {
             config.initProgressFlow.first { it.done }

@@ -139,6 +139,15 @@ fun TrioOverviewScreen(
     var showNotificationSheet by remember { mutableStateOf(false) }
     var showBolusDialog by remember { mutableStateOf(false) }
     var showSensorSheet by remember { mutableStateOf(false) }
+    // The sheet reads the sensor data itself when the screen starts and every time it opens, so it
+    // does not depend only on sensorInfo reaching this screen.
+    var shownSensorInfo by remember { mutableStateOf(sensorInfo) }
+    LaunchedEffect(sensorInfo) {
+        shownSensorInfo = sensorInfo
+    }
+    LaunchedEffect(showSensorSheet) {
+        loadSensorInfo()?.let { shownSensorInfo = it }
+    }
     val visibleNotifications = notifications.filterNot {
         it.instanceKey to it.date in dismissedNotifications
     }
@@ -196,7 +205,7 @@ fun TrioOverviewScreen(
         onTbrChipClick = onTbrChipClick,
         onIobChipClick = onIobChipClick,
         onBgSourceClick = onBgSourceClick,
-        sensorInfo = sensorInfo,
+        sensorInfo = shownSensorInfo,
         onSensorInfoClick = { showSensorSheet = true },
         paddingValues = paddingValues,
         activeSceneState = activeSceneState,
@@ -250,7 +259,7 @@ fun TrioOverviewScreen(
 
     if (showSensorSheet) {
         SensorInfoBottomSheet(
-            sensorInfo = sensorInfo,
+            sensorInfo = shownSensorInfo,
             now = now,
             onDismiss = { showSensorSheet = false },
             onOpenSettings = {

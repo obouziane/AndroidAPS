@@ -60,7 +60,8 @@ fun OverviewScreen(
     reservoirUnits: Double? = null,
     onBgSourceClick: () -> Unit = {},
     timeInRangeTodayFlow: StateFlow<TimeInRangeToday?>,
-    sensorInfo: SensorInfo = SensorInfo()
+    sensorInfo: SensorInfo = SensorInfo(),
+    loadSensorInfo: suspend () -> SensorInfo? = { null }
 ) {
     val runningModeSceneManaged = activeSceneState?.scopedRecords?.rmId
         ?.let { it == runningModeRecordId && it > 0 } == true
@@ -111,7 +112,8 @@ fun OverviewScreen(
                 onStopBolus = onStopBolus,
                 timeInRangeTodayFlow = timeInRangeTodayFlow,
                 formatDuration = formatDuration,
-                sensorInfo = sensorInfo
+                sensorInfo = sensorInfo,
+                loadSensorInfo = loadSensorInfo
         )
     )
 }

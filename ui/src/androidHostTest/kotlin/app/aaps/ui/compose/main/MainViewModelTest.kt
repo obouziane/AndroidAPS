@@ -1,7 +1,10 @@
 package app.aaps.ui.compose.main
 
+import androidx.lifecycle.viewModelScope
 import app.aaps.core.data.model.ActiveSceneState
+import app.aaps.core.data.model.GV
 import app.aaps.core.data.model.RM
+import app.aaps.core.data.model.TE
 import app.aaps.core.data.plugin.PluginType
 import app.aaps.core.interfaces.ui.UrlOpener
 import app.aaps.core.interfaces.aps.Loop
@@ -10,6 +13,7 @@ import app.aaps.core.interfaces.automation.Automation
 import app.aaps.core.interfaces.bolus.BatchExecutor
 import app.aaps.core.interfaces.bolus.WizardExecutor
 import app.aaps.core.interfaces.configuration.Config
+import app.aaps.core.interfaces.configuration.InitProgress
 import app.aaps.core.interfaces.constraints.ConstraintsChecker
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.iob.IobCobCalculator
@@ -28,9 +32,11 @@ import app.aaps.core.interfaces.profile.ProfileUtil
 import app.aaps.core.interfaces.protection.ProtectionCheck
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.rx.bus.RxBus
+import app.aaps.core.interfaces.rx.events.Event
 import app.aaps.core.interfaces.scenes.ActiveSceneSync
 import app.aaps.core.interfaces.scenes.SceneActions
 import app.aaps.core.interfaces.scenes.SceneChainResolver
+import app.aaps.core.interfaces.source.BgSource
 import app.aaps.core.interfaces.sync.NsClient
 import app.aaps.core.interfaces.ui.IconsProvider
 import app.aaps.core.interfaces.utils.DateUtil
@@ -49,10 +55,15 @@ import app.aaps.core.objects.wizard.QuickWizard
 import app.aaps.core.ui.compose.navigation.NavigationRequest
 import app.aaps.ui.compose.quickLaunch.QuickLaunchResolver
 import com.google.common.truth.Truth.assertThat
+import kotlin.reflect.KClass
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.resetMain
@@ -64,6 +75,7 @@ import org.mockito.Mock
 import org.mockito.MockitoAnnotations
 import org.mockito.kotlin.any
 import org.mockito.kotlin.mock
+import org.mockito.kotlin.stub
 import org.mockito.kotlin.whenever
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -294,5 +306,57 @@ internal class MainViewModelTest {
 
         whenever(config.platform).thenReturn(AppPlatform.Desktop)
         assertThat(sut.showBatteryHelp).isFalse()
+    }
+
+    /**
+     * The sensor info sheet must have data as soon as the overview is shown. It used to read once
+     * and then only every 30 s, so the sheet stayed empty after start up.
+     */
+    @Test
+    fun `sensor info loads after start up and reloads on a new sensor change`() {
+        // The view model from setUp was built without these stubs. Stop it so it does not run below.
+        sut.viewModelScope.cancel()
+        // Shares the scheduler of the main test dispatcher set in setUp.
+        val main = StandardTestDispatcher()
+        val initProgress = MutableStateFlow(InitProgress())
+        val therapyEvents = MutableSharedFlow<List<TE>>(extraBufferCapacity = 1)
+        whenever(config.initProgressFlow).thenReturn(initProgress)
+        whenever(persistenceLayer.observeChanges(TE::class)).thenReturn(therapyEvents)
+        whenever(persistenceLayer.observeChanges(GV::class)).thenReturn(emptyFlow())
+        whenever(persistenceLayer.databaseClearedFlow).thenReturn(emptyFlow())
+        whenever(rxBus.toFlow(any<KClass<Event>>())).thenReturn(emptyFlow())
+        val bgSource: BgSource = mock()
+        whenever(bgSource.sensorBatteryLevel).thenReturn(80)
+        whenever(activePlugin.activeBgSource).thenReturn(bgSource)
+        val sensorEvent: TE = mock()
+        whenever(sensorEvent.timestamp).thenReturn(1_000L)
+        persistenceLayer.stub { onBlocking { getLastTherapyRecordUpToNow(TE.Type.SENSOR_CHANGE) }.thenReturn(null) }
+        persistenceLayer.stub { onBlocking { getBgReadingsDataFromTimeToTime(any(), any(), any()) }.thenReturn(emptyList()) }
+        persistenceLayer.stub { onBlocking { getApsResults(any(), any()) }.thenReturn(emptyList()) }
+
+        val viewModel = createViewModel()
+        main.scheduler.runCurrent()
+        // Not read before the app has finished start up.
+        assertThat(viewModel.sensorInfo.value).isEqualTo(SensorInfo())
+
+        initProgress.value = InitProgress(done = true)
+        main.scheduler.runCurrent()
+        assertThat(viewModel.sensorInfo.value).isEqualTo(SensorInfo(batteryLevel = 80))
+
+        persistenceLayer.stub { onBlocking { getLastTherapyRecordUpToNow(TE.Type.SENSOR_CHANGE) }.thenReturn(sensorEvent) }
+        therapyEvents.tryEmit(listOf(sensorEvent))
+        main.scheduler.runCurrent()
+        assertThat(viewModel.sensorInfo.value).isEqualTo(SensorInfo(startedAt = 1_000L, batteryLevel = 80))
+
+        // A refresh reads again, even when no change was sent.
+        whenever(bgSource.sensorBatteryLevel).thenReturn(50)
+        viewModel.refreshSensorInfo()
+        main.scheduler.runCurrent()
+        assertThat(viewModel.sensorInfo.value).isEqualTo(SensorInfo(startedAt = 1_000L, batteryLevel = 50))
+
+        // The sheet reads the data itself when it opens.
+        whenever(bgSource.sensorBatteryLevel).thenReturn(40)
+        assertThat(runBlocking { viewModel.loadSensorInfo() }).isEqualTo(SensorInfo(startedAt = 1_000L, batteryLevel = 40))
+        viewModel.viewModelScope.cancel()
     }
 }

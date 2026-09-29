@@ -45,7 +45,7 @@
     <string name="trio_sensor_battery">Battery</string>
     <string name="trio_sensor_battery_value" comment="%1$d=battery percentage. Example: 80%">%1$d%%</string>
     <string name="trio_sensor_value_unavailable">Not available</string>
-    <string name="trio_sensor_open_settings">Sensor source settings</string>
+    <string name="trio_sensor_open_settings">View sensor source</string>
     <string name="trio_no_glucose_source">No CGM</string>
     <string name="trio_loop_less_than_one_minute">&lt; 1 m</string>
     <string name="trio_loop_minutes" comment="%1$d=number of minutes since the last loop. Example: 4 m">%1$d m</string>

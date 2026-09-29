@@ -190,6 +190,7 @@ fun MainScreen(
                         pumpEndTimeMillis = uiState.pumpEndTimeMillis,
                         reservoirUnits = uiState.reservoirUnits,
                         sensorInfo = sensorInfo,
+                        loadSensorInfo = mainViewModel::loadSensorInfo,
                         onBgSourceClick = {
                             onNavigate(mainViewModel.bgSourceNavigationRequest())
                         }

@@ -56,5 +56,6 @@ data class TrioOverviewModel(
     val onStopBolus: () -> Unit,
     val timeInRangeTodayFlow: StateFlow<TimeInRangeToday?>,
     val formatDuration: (Long) -> String,
-    val sensorInfo: SensorInfo
+    val sensorInfo: SensorInfo,
+    val loadSensorInfo: suspend () -> SensorInfo?
 )
