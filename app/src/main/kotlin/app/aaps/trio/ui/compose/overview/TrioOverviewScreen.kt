@@ -103,6 +103,7 @@ import app.aaps.ui.compose.notificationsSheet.toColor
 import app.aaps.ui.R
 import app.aaps.ui.compose.main.TempTargetChipState
 import app.aaps.ui.compose.main.TempTargetUiState
+import app.aaps.ui.compose.main.SensorInfo
 import app.aaps.ui.compose.notificationsSheet.NotificationBottomSheet
 import app.aaps.ui.compose.overview.BgInfoSection
 import app.aaps.ui.compose.overview.OverviewChipsColumn
@@ -137,6 +138,7 @@ fun TrioOverviewScreen(
     var dismissedNotifications by remember { mutableStateOf(emptySet<Pair<Int, Long>>()) }
     var showNotificationSheet by remember { mutableStateOf(false) }
     var showBolusDialog by remember { mutableStateOf(false) }
+    var showSensorSheet by remember { mutableStateOf(false) }
     val visibleNotifications = notifications.filterNot {
         it.instanceKey to it.date in dismissedNotifications
     }
@@ -194,6 +196,8 @@ fun TrioOverviewScreen(
         onTbrChipClick = onTbrChipClick,
         onIobChipClick = onIobChipClick,
         onBgSourceClick = onBgSourceClick,
+        sensorInfo = sensorInfo,
+        onSensorInfoClick = { showSensorSheet = true },
         paddingValues = paddingValues,
         activeSceneState = activeSceneState,
         sceneExpired = sceneExpired,
@@ -243,6 +247,18 @@ fun TrioOverviewScreen(
             onDismiss = { showBolusDialog = false }
         )
     }
+
+    if (showSensorSheet) {
+        SensorInfoBottomSheet(
+            sensorInfo = sensorInfo,
+            now = now,
+            onDismiss = { showSensorSheet = false },
+            onOpenSettings = {
+                showSensorSheet = false
+                onBgSourceClick()
+            }
+        )
+    }
 }
 
 @Composable
@@ -274,6 +290,8 @@ private fun TrioOverviewContent(
     onTbrChipClick: () -> Unit,
     onIobChipClick: () -> Unit,
     onBgSourceClick: () -> Unit,
+    sensorInfo: SensorInfo,
+    onSensorInfoClick: () -> Unit,
     paddingValues: PaddingValues,
     activeSceneState: ActiveSceneState?,
     sceneExpired: Boolean,
@@ -394,11 +412,12 @@ private fun TrioOverviewContent(
                                     bgInfo = bgInfo,
                                     timeAgoText = bgTimeAgoText,
                                     size = bgInfoSize,
-                                    modifier = Modifier.clickable(onClick = onBgSourceClick),
+                                    modifier = Modifier.clickable(onClick = onSensorInfoClick),
                                     useGradientRing = true,
                                     elevation = AapsSpacing.medium
                                 )
                             }
+
                             LoopStatusAndPrediction(
                                 runningMode = runningMode,
                                 runningModeText = runningModeText,
@@ -408,6 +427,7 @@ private fun TrioOverviewContent(
                                 modifier = Modifier.weight(1f),
                             )
                         }
+
                     }
 
                     Row(
@@ -655,6 +675,12 @@ private fun TrioOverviewScreenPreview() {
             onTbrChipClick = {},
             onIobChipClick = {},
             onBgSourceClick = {},
+            sensorInfo = SensorInfo(
+                sourceName = "xDrip",
+                startedAt = 1_779_000_000_000L,
+                batteryLevel = 80
+            ),
+            onSensorInfoClick = {},
             paddingValues = PaddingValues(),
             activeSceneState = null,
             sceneExpired = false,

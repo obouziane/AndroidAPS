@@ -9,6 +9,7 @@ import app.aaps.core.data.iob.InMemoryGlucoseValue
 import app.aaps.core.data.model.ActiveSceneState
 import app.aaps.core.data.model.RM
 import app.aaps.core.data.model.SceneLifecycle
+import app.aaps.core.data.model.TE
 import app.aaps.core.data.model.TT
 import app.aaps.core.data.plugin.PluginType
 import app.aaps.core.data.time.T
@@ -39,6 +40,7 @@ import app.aaps.core.interfaces.overview.graph.TbrState
 import app.aaps.core.interfaces.overview.graph.TempTargetDisplayData
 import app.aaps.core.interfaces.overview.graph.TempTargetState
 import app.aaps.core.interfaces.plugin.ActivePlugin
+import app.aaps.core.interfaces.plugin.PluginBase
 import app.aaps.core.interfaces.profile.Profile
 import app.aaps.core.interfaces.profile.ProfileFunction
 import app.aaps.core.interfaces.profile.ProfileUtil
@@ -166,6 +168,26 @@ class MainViewModel(
     // binds the same instance under both names.
     private val appScope: CoroutineScope
 ) : ViewModel() {
+
+    val sensorInfo: StateFlow<SensorInfo> = flow {
+        while (true) {
+            val source = activePlugin.activeBgSource
+            val sourceName = (source as? PluginBase)?.name.orEmpty()
+            val sensorEvent = persistenceLayer.getLastTherapyRecordUpToNow(TE.Type.SENSOR_CHANGE)
+            emit(
+                SensorInfo(
+                    sourceName = sourceName,
+                    startedAt = sensorEvent?.timestamp,
+                    batteryLevel = source.sensorBatteryLevel
+                )
+            )
+            delay(30_000L)
+        }
+    }.stateIn(
+        viewModelScope,
+        SharingStarted.Eagerly,
+        SensorInfo()
+    )
 
     // Event-driven state (drawer, dialogs, simple-mode preference). Imperative .update{} calls
     // from user actions and preference observers land here.

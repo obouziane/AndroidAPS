@@ -8,6 +8,7 @@ import app.aaps.core.interfaces.notifications.AapsNotification
 import app.aaps.core.interfaces.overview.graph.TbrState
 import app.aaps.core.interfaces.pump.BolusProgressState
 import app.aaps.core.ui.compose.navigation.NavigationRequest
+import app.aaps.ui.compose.main.SensorInfo
 import app.aaps.ui.compose.main.TempTargetUiState
 import app.aaps.ui.compose.overview.chips.ChipsViewModel
 import app.aaps.ui.compose.overview.graphs.GraphViewModel
@@ -58,7 +59,8 @@ fun OverviewScreen(
     pumpEndTimeMillis: Long? = null,
     reservoirUnits: Double? = null,
     onBgSourceClick: () -> Unit = {},
-    timeInRangeTodayFlow: StateFlow<TimeInRangeToday?>
+    timeInRangeTodayFlow: StateFlow<TimeInRangeToday?>,
+    sensorInfo: SensorInfo = SensorInfo()
 ) {
     val runningModeSceneManaged = activeSceneState?.scopedRecords?.rmId
         ?.let { it == runningModeRecordId && it > 0 } == true
@@ -108,7 +110,8 @@ fun OverviewScreen(
                 bolusStateFlow = bolusStateFlow,
                 onStopBolus = onStopBolus,
                 timeInRangeTodayFlow = timeInRangeTodayFlow,
-                formatDuration = formatDuration
+                formatDuration = formatDuration,
+                sensorInfo = sensorInfo
         )
     )
 }

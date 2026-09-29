@@ -36,6 +36,16 @@
     <string name="trio_no_pump">No Pump</string>
     <string name="trio_pump_time_days_hours" comment="%1$d=whole days left, %2$d=remaining whole hours. Example: 2d 6h">%1$dd %2$dh</string>
     <string name="trio_pump_time_hours" comment="%1$d=whole hours left. Example: 6h">%1$dh</string>
+    <string name="trio_sensor_info">Sensor information</string>
+    <string name="trio_sensor_source">Source</string>
+    <string name="trio_sensor_started">Started</string>
+    <string name="trio_sensor_age_label">Sensor age</string>
+    <string name="trio_sensor_age" comment="%1$d=whole days, %2$d=remaining whole hours. Example: 3d 5h">%1$dd %2$dh</string>
+    <string name="trio_sensor_age_unavailable">Unavailable</string>
+    <string name="trio_sensor_battery">Battery</string>
+    <string name="trio_sensor_battery_value" comment="%1$d=battery percentage. Example: 80%">%1$d%%</string>
+    <string name="trio_sensor_value_unavailable">Not available</string>
+    <string name="trio_sensor_open_settings">Sensor source settings</string>
     <string name="trio_no_glucose_source">No CGM</string>
     <string name="trio_loop_less_than_one_minute">&lt; 1 m</string>
     <string name="trio_loop_minutes" comment="%1$d=number of minutes since the last loop. Example: 4 m">%1$d m</string>

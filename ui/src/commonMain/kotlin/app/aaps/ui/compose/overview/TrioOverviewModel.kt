@@ -8,6 +8,7 @@ import app.aaps.core.interfaces.overview.graph.TbrState
 import app.aaps.core.interfaces.pump.BolusProgressState
 import app.aaps.core.ui.compose.navigation.NavigationRequest
 import app.aaps.ui.compose.main.TempTargetUiState
+import app.aaps.ui.compose.main.SensorInfo
 import app.aaps.ui.compose.overview.chips.ChipsViewModel
 import app.aaps.ui.compose.overview.graphs.GraphViewModel
 import kotlinx.coroutines.flow.StateFlow
@@ -54,5 +55,6 @@ data class TrioOverviewModel(
     val bolusStateFlow: StateFlow<BolusProgressState?>,
     val onStopBolus: () -> Unit,
     val timeInRangeTodayFlow: StateFlow<TimeInRangeToday?>,
-    val formatDuration: (Long) -> String
+    val formatDuration: (Long) -> String,
+    val sensorInfo: SensorInfo
 )

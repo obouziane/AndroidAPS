@@ -92,6 +92,7 @@ fun MainScreen(
     LocalDateUtil.current
     var showTrioAddSheet by rememberSaveable { mutableStateOf(false) }
     val cobUiState by chipsViewModel.cobUiState.collectAsStateWithLifecycle()
+    val sensorInfo by mainViewModel.sensorInfo.collectAsStateWithLifecycle()
     val snackbarHostState = LocalSnackbarHostState.current
 
     LaunchedEffect(Unit) {
@@ -188,6 +189,7 @@ fun MainScreen(
                         pumpNeedsSetup = pumpSetupPlugin != null,
                         pumpEndTimeMillis = uiState.pumpEndTimeMillis,
                         reservoirUnits = uiState.reservoirUnits,
+                        sensorInfo = sensorInfo,
                         onBgSourceClick = {
                             onNavigate(mainViewModel.bgSourceNavigationRequest())
                         }
