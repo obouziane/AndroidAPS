@@ -1239,7 +1239,6 @@ class O5PumpPlugin @Inject constructor(
     override val pumpDescription: PumpDescription = Companion.pumpDescription
     override fun manufacturer(): ManufacturerType = ManufacturerType.Insulet
     override fun model(): PumpType = pumpDescription.pumpType
-    override fun serialNumber(): String = podStateManager.podId?.toString() ?: "O5-unpaired"
     override fun expectedEndTimeMillis(): Long? = podStateManager.expiry?.toInstant()?.toEpochMilli()
     override fun serialNumber(): String = podStateManager.podId?.toString() ?: UNPAIRED_SERIAL
     override val isFakingTempsByExtendedBoluses: Boolean = false
