@@ -13,6 +13,7 @@ import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.iob.IobCobCalculator
 import app.aaps.core.interfaces.nsclient.ProcessedDeviceStatusData
 import app.aaps.core.interfaces.overview.OverviewData
+import app.aaps.core.interfaces.overview.graph.GraphDataPoint
 import app.aaps.core.interfaces.overview.graph.OverviewDataCache
 import app.aaps.core.interfaces.overview.graph.TimeRange
 import app.aaps.core.interfaces.profiling.Profiler
@@ -143,5 +144,36 @@ class PrepareGraphDataRunnerTest : TestBaseWithProfile() {
         assertEquals(4_000L, graphDataEndTime(range, overviewEndTime = 4_000L))
         assertEquals(3_000L, graphDataEndTime(range, overviewEndTime = 2_000L))
         assertEquals(4_000L, graphDataEndTime(null, overviewEndTime = 4_000L))
+    }
+
+    @Test
+    fun `COB prediction declines by the latest five minute absorption`() {
+        assertEquals(
+            listOf(
+                GraphDataPoint(0L, 10.0),
+                GraphDataPoint(300_000L, 6.0),
+                GraphDataPoint(600_000L, 2.0),
+                GraphDataPoint(900_000L, 0.0)
+            ),
+            predictCob(
+                startTimestamp = 0L,
+                startCob = 10.0,
+                absorptionPerFiveMinutes = 4.0,
+                endTimestamp = 1_200_000L
+            )
+        )
+    }
+
+    @Test
+    fun `COB prediction is empty without a usable absorption rate`() {
+        assertEquals(
+            emptyList(),
+            predictCob(
+                startTimestamp = 0L,
+                startCob = 10.0,
+                absorptionPerFiveMinutes = 0.0,
+                endTimestamp = 1_200_000L
+            )
+        )
     }
 }

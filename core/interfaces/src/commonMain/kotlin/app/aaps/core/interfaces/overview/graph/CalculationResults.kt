@@ -140,7 +140,8 @@ data class AbsIobGraphData(
  */
 data class CobGraphData(
     val cob: List<GraphDataPoint>,
-    val failOverPoints: List<CobFailOverPoint>
+    val failOverPoints: List<CobFailOverPoint>,
+    val predictions: List<GraphDataPoint> = emptyList()
 )
 
 /**

@@ -10,6 +10,8 @@ import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import app.aaps.core.interfaces.overview.graph.CobGraphData
+import app.aaps.core.interfaces.overview.graph.GraphDataPoint
 import app.aaps.core.interfaces.overview.graph.IobGraphData
 import app.aaps.core.interfaces.overview.graph.SeriesType
 import com.patrykandpatrick.vico.compose.cartesian.CartesianDrawingContext
@@ -214,12 +216,28 @@ fun normalizerX(maxX: Double): List<Double> = listOf(0.0, maxX)
 /**
  * Joins calculated IOB history with its future samples.
  *
- * The producer keeps these lists separate, but both belong to the same IOB curve. The historical
- * value wins when both lists contain the boundary timestamp.
+ * The producer keeps these lists separate, but both belong to the same IOB curve. A full workflow
+ * result can include calculated future values in [IobGraphData.iob] as well as the dedicated
+ * prediction series. Once predictions begin, they are the only future source so the two series do
+ * not alternate and make the line bumpy.
  */
-fun IobGraphData.allPoints() = (iob + predictions)
-    .sortedBy { it.timestamp }
-    .distinctBy { it.timestamp }
+fun IobGraphData.allPoints(): List<GraphDataPoint> {
+    val sortedPredictions = predictions.sortedBy { it.timestamp }.distinctBy { it.timestamp }
+    if (sortedPredictions.isEmpty()) return iob.sortedBy { it.timestamp }.distinctBy { it.timestamp }
+    val predictionStart = sortedPredictions.first().timestamp
+    return (iob.filter { it.timestamp < predictionStart } + sortedPredictions)
+        .sortedBy { it.timestamp }
+        .distinctBy { it.timestamp }
+}
+
+fun CobGraphData.allPoints(): List<GraphDataPoint> {
+    val sortedPredictions = predictions.sortedBy { it.timestamp }.distinctBy { it.timestamp }
+    if (sortedPredictions.isEmpty()) return cob.sortedBy { it.timestamp }.distinctBy { it.timestamp }
+    val predictionStart = sortedPredictions.first().timestamp
+    return (cob.filter { it.timestamp < predictionStart } + sortedPredictions)
+        .sortedBy { it.timestamp }
+        .distinctBy { it.timestamp }
+}
 
 /**
  * Triangle shape pointing upward (apex at top center, flat base at bottom).

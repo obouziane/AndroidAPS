@@ -221,7 +221,7 @@ fun GlucoseChart(
     val carbEntries = remember(treatments) { treatments.carbs.filter { it.isValid && it.amount > 0.0 } }
     val basalSegments = remember(basal) { basal.actualBasal.sortedBy(GraphDataPoint::timestamp) }
     val iobPointsAsc = remember(iobData) { iobData.allPoints() }
-    val cobPointsAsc = remember(cobData) { cobData.cob.sortedBy(GraphDataPoint::timestamp) }
+    val cobPointsAsc = remember(cobData) { cobData.allPoints() }
     val targetPointsAsc = remember(targetLine) { targetLine.targets.sortedBy(GraphDataPoint::timestamp) }
     val basalCeiling = remember(basal) { basal.maxBasal.coerceAtLeast(0.1) }
     val activeProfileBasalRate = remember(basal, nowTimestamp) {
@@ -760,14 +760,11 @@ fun GlucoseChart(
             }
 
             // COB curve in the IOB strip, on its own grams scale, drawn under IOB.
-            val cobPoints = cobPointsAsc.sliceByMillis(viewportStartMillis, viewportEndMillis) { it.timestamp }
-            val latestCob = cobPointsAsc.lastOrNull()
-            val cobLinePoints = if (latestCob != null && viewportEndMillis > nowTimestamp && latestCob.timestamp < viewportEndMillis) {
-                (cobPointsAsc + GraphDataPoint(viewportEndMillis, latestCob.value))
-                    .sliceByMillis(viewportStartMillis, viewportEndMillis, includeBounds = true) { it.timestamp }
-            } else {
-                cobPoints
-            }
+            val cobLinePoints = cobPointsAsc.sliceByMillis(
+                viewportStartMillis,
+                viewportEndMillis,
+                includeBounds = true
+            ) { it.timestamp }
             val maxCobGrams = cobLinePoints.maxOfOrNull { it.value } ?: 0.0
             if (cobLinePoints.size >= 2 && maxCobGrams > 0.0) {
                 val cobScale = maxCobGrams.coerceAtLeast(10.0)

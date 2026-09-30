@@ -8,16 +8,24 @@ import kotlin.test.assertEquals
 class IobGraphPointsTest {
 
     @Test
-    fun `IOB points include the future prediction samples`() {
+    fun `IOB points switch to the dedicated future prediction samples`() {
         val data = IobGraphData(
-            iob = listOf(GraphDataPoint(1_000L, 2.0), GraphDataPoint(2_000L, 1.5)),
-            predictions = listOf(GraphDataPoint(2_000L, 1.4), GraphDataPoint(3_000L, 1.0))
+            iob = listOf(
+                GraphDataPoint(1_000L, 2.0),
+                GraphDataPoint(2_000L, 1.5),
+                GraphDataPoint(2_500L, 1.3),
+                GraphDataPoint(3_000L, 1.1)
+            ),
+            predictions = listOf(
+                GraphDataPoint(2_000L, 1.4),
+                GraphDataPoint(3_000L, 1.0)
+            )
         )
 
         assertEquals(
             listOf(
                 GraphDataPoint(1_000L, 2.0),
-                GraphDataPoint(2_000L, 1.5),
+                GraphDataPoint(2_000L, 1.4),
                 GraphDataPoint(3_000L, 1.0)
             ),
             data.allPoints()
