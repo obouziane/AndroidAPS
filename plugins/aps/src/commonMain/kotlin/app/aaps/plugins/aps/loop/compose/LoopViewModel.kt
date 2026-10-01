@@ -74,7 +74,7 @@ class LoopViewModel(
         val lastRun = loop.lastRun
         if (lastRun == null) {
             _uiState.value = LoopUiState(
-                statusMessage = rh.gs(CoreUiStrings.not_available_full)
+                statusMessage = loop.lastRunStatus ?: rh.gs(CoreUiStrings.not_available_full)
             )
             return
         }
@@ -92,6 +92,10 @@ class LoopViewModel(
             .joinToString("\n")
 
         _uiState.value = LoopUiState(
+            // Rebuilt from the plugin rather than remembered from the event: updateState() also
+            // runs on EventLoopUpdateGui, so without this a stopped loop would lose its reason
+            // again on the very next refresh.
+            statusMessage = loop.lastRunStatus.orEmpty(),
             lastRun = dateUtil.dateAndTimeString(lastRun.lastAPSRun),
             source = lastRun.source ?: "",
             request = lastRun.request?.resultAsString() ?: "",

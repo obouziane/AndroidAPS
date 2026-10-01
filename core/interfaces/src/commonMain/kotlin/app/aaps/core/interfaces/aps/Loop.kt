@@ -41,6 +41,16 @@ interface Loop {
     var lastRun: LastRun?
 
     /**
+     * Text of the reason the last loop run stopped before it reached the pump, or null when the
+     * last run finished normally.
+     *
+     * The same text goes to the Loop tab as `EventLoopSetLastRunGui`. That event lives in the APS
+     * plugin, so it cannot leave that module - this field is how the overview learns that the loop
+     * is held up and why, instead of showing the reason of a much older run.
+     */
+    val lastRunStatus: String?
+
+    /**
      * Variable to store reasons of disabled loop
      */
     var closedLoopEnabled: Constraint<Boolean>?

@@ -321,6 +321,7 @@ class MainViewModel(
         runningModeText = getModeNameString(cachedOverviewStatus.runningMode),
         lastLoopAgeMillis = persistedLastLoopTimestamp.value?.let { (dateUtil.now() - it).coerceAtLeast(0L) },
         algorithmReasoning = currentAlgorithmReasoning(),
+        loopStoppedReason = currentLoopStoppedReason(),
         pumpEndTimeMillis = cachedOverviewStatus.pumpEndTimeMillis,
         reservoirUnits = cachedOverviewStatus.reservoirUnits
     )
@@ -381,6 +382,7 @@ class MainViewModel(
             runningModeRecordId = chip.runningModeRecordId,
             lastLoopAgeMillis = chip.lastLoopAgeMillis,
             algorithmReasoning = chip.algorithmReasoning,
+            loopStoppedReason = chip.loopStoppedReason,
             tbrState = chip.tbrState,
             smbEnabled = ev.smbEnabled,
             pumpEndTimeMillis = chip.pumpEndTimeMillis,
@@ -438,13 +440,27 @@ class MainViewModel(
      *
      * Client builds read device status because they have no local loop run. This is not cached so
      * the text always describes the current result.
+     *
+     * When the loop stopped before it reached the pump - no profile, pump busy, loop disabled - the
+     * reason it stopped is shown instead. The stored result is then from an older run, so showing
+     * it would say the loop is doing something it is no longer doing.
      */
     private fun currentAlgorithmReasoning(): String? =
         if (config.AAPSCLIENT) {
             processedDeviceStatusData.getAPSResult()?.reason
         } else {
-            loop.lastRun?.constraintsProcessed?.reason
+            loop.lastRunStatus ?: loop.lastRun?.constraintsProcessed?.reason
         }
+
+    /**
+     * Returns the reason the last loop run stopped before it reached the pump, or null when the
+     * loop ran through.
+     *
+     * A client has no local loop run, so it cannot tell a stopped loop from a quiet one and shows
+     * nothing.
+     */
+    private fun currentLoopStoppedReason(): String? =
+        if (config.AAPSCLIENT) null else loop.lastRunStatus
 
     private fun refreshTimeInRangeToday() {
         timeInRangeTodayJob?.cancel()
@@ -637,6 +653,18 @@ class MainViewModel(
         }
         val livePumpEndTimeMillis = (activePlugin.activePumpInternal as? PumpTimeRemaining)?.expectedEndTimeMillis()
 
+        // The last loop time can come from three places: the loop plugin's in-memory run (master),
+        // the device status pushed by the master (client) and the value kept over a restart. Take
+        // the newest one and store it, so the pill does not keep an old age until the app is
+        // force closed - a client has no local loop run at all, and its device status only
+        // reached the pill when the view model was built.
+        val newestLastLoop = listOfNotNull(
+            loop.lastRun?.lastAPSRun?.takeIf { it > 0L },
+            processedDeviceStatusData.openApsTimestamp.takeIf { config.AAPSCLIENT && it > 0L },
+            persistedLastLoop
+        ).maxOrNull()
+        newestLastLoop?.let(::cacheLastLoopTimestamp)
+
         val liveState = ChipState(
             isProfileLoaded = profileData?.isLoaded ?: cachedOverviewStatus.profileName.isNotEmpty(),
             profileName = profileData?.let { profileText } ?: cachedOverviewStatus.profileName,
@@ -658,8 +686,9 @@ class MainViewModel(
             runningModeRemaining = rmRemaining,
             runningModeProgress = rmProgress,
             runningModeRecordId = if (rmExpired) 0 else rmData?.recordId ?: 0,
-            lastLoopAgeMillis = (loop.lastRun?.lastAPSRun ?: persistedLastLoop)?.let { (now - it).coerceAtLeast(0L) },
+            lastLoopAgeMillis = newestLastLoop?.let { (now - it).coerceAtLeast(0L) },
             algorithmReasoning = currentAlgorithmReasoning(),
+            loopStoppedReason = currentLoopStoppedReason(),
             tbrState = if (tbrExpired) TbrState.NONE else tbrData?.state ?: TbrState.NONE,
             pumpEndTimeMillis = if (isOverviewHydrated) livePumpEndTimeMillis else cachedOverviewStatus.pumpEndTimeMillis,
             reservoirUnits = if (isOverviewHydrated) liveReservoirUnits else cachedOverviewStatus.reservoirUnits,
@@ -1268,6 +1297,7 @@ private data class ChipState(
     val runningModeRecordId: Long = 0,
     val lastLoopAgeMillis: Long? = null,
     val algorithmReasoning: String? = null,
+    val loopStoppedReason: String? = null,
     val tbrState: TbrState = TbrState.NONE,
     val pumpEndTimeMillis: Long? = null,
     val reservoirUnits: Double? = null,
@@ -1284,6 +1314,7 @@ private fun MainUiState.toInitialChipState() = ChipState(
     runningModeText = runningModeText,
     lastLoopAgeMillis = lastLoopAgeMillis,
     algorithmReasoning = algorithmReasoning,
+    loopStoppedReason = loopStoppedReason,
     pumpEndTimeMillis = pumpEndTimeMillis,
     reservoirUnits = reservoirUnits
 )

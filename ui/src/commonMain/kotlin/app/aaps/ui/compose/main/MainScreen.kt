@@ -160,6 +160,7 @@ fun MainScreen(
                         runningModeRecordId = uiState.runningModeRecordId,
                         lastLoopAgeMillis = uiState.lastLoopAgeMillis,
                         algorithmReasoning = uiState.algorithmReasoning,
+                        loopStoppedReason = uiState.loopStoppedReason,
                         tbrState = uiState.tbrState,
                         smbEnabled = uiState.smbEnabled,
                         profileCardTempTargetStateFlow = mainViewModel.profileCardTempTargetStateFlow,

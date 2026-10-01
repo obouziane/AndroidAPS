@@ -14,6 +14,10 @@ import app.aaps.core.interfaces.constraints.Constraint
 import app.aaps.core.interfaces.constraints.ConstraintsChecker
 import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.logging.UserEntryLogger
+import app.aaps.core.interfaces.notifications.AlarmSound
+import app.aaps.core.interfaces.notifications.NotificationAction
+import app.aaps.core.interfaces.notifications.NotificationId
+import app.aaps.core.interfaces.notifications.NotificationLevel
 import app.aaps.core.interfaces.nsclient.ProcessedDeviceStatusData
 import app.aaps.core.interfaces.plugin.EnforcedState
 import app.aaps.core.interfaces.profile.EffectiveProfile
@@ -986,5 +990,46 @@ class LoopPluginTest : TestBaseWithProfile() {
         assertThat(first!!.isCancelled).isTrue()
         assertThat(loopPlugin.smbFallbackJob).isNotSameInstanceAs(first)
         assertThat(loopPlugin.smbFallbackJob!!.isActive).isTrue()
+    }
+
+    /**
+     * A run that stops before it reaches the pump must say so somewhere the user looks.
+     *
+     * The reason used to go only to the Loop tab, which hides it as soon as any run exists, so the
+     * overview showed the reason of an ever older run and nothing explained the silence.
+     */
+    @Test
+    fun `a stopped loop reports its reason to the overview`() = runTest {
+        setupForPreCheck()
+        mockCurrentMode(RM(mode = RM.Mode.DISABLED_LOOP, timestamp = dateUtil.now(), duration = 0))
+        whenever(constraintChecker.isLoopInvocationAllowed()).thenReturn(ConstraintObject(false, aapsLogger))
+
+        loopPlugin.invoke("test", allowNotification = false)
+
+        assertThat(loopPlugin.lastRunStatus).isEqualTo("Loop disabled by user")
+    }
+
+    /**
+     * The card waits for the second run with the same reason. A single skipped cycle is normal -
+     * the queue is busy while a bolus is given - and a card that appears and clears again on every
+     * bolus is noise.
+     */
+    @Test
+    fun `the notification card is posted only when the reason repeats`() = runTest {
+        setupForPreCheck()
+        mockCurrentMode(RM(mode = RM.Mode.DISABLED_LOOP, timestamp = dateUtil.now(), duration = 0))
+        whenever(constraintChecker.isLoopInvocationAllowed()).thenReturn(ConstraintObject(false, aapsLogger))
+
+        loopPlugin.invoke("test", allowNotification = false)
+        verify(notificationManager, never()).post(
+            eq(NotificationId.LOOP_NOT_RUNNING), any<String>(), any<NotificationLevel>(), any<Int>(),
+            anyOrNull<AlarmSound>(), any<List<NotificationAction>>(), anyOrNull<() -> Boolean>()
+        )
+
+        loopPlugin.invoke("test", allowNotification = false)
+        verify(notificationManager).post(
+            eq(NotificationId.LOOP_NOT_RUNNING), eq("Loop disabled by user"), any<NotificationLevel>(), any<Int>(),
+            anyOrNull<AlarmSound>(), any<List<NotificationAction>>(), anyOrNull<() -> Boolean>()
+        )
     }
 }

@@ -189,6 +189,41 @@ internal class MainViewModelTest {
         assertThat(sut.uiState.value.algorithmReasoning).isEqualTo("Keep basal rate")
     }
 
+    /**
+     * When the loop stopped before it reached the algorithm, the reason it stopped is newer than
+     * the result of the last run that did finish, so it is the one to show.
+     */
+    @Test
+    fun `algorithm reasoning prefers the reason the loop stopped`() {
+        val result = mock<APSResult> {
+            on { reason }.thenReturn("Keep basal rate")
+        }
+        whenever(config.AAPSCLIENT).thenReturn(false)
+        whenever(loop.lastRun).thenReturn(Loop.LastRun().apply { constraintsProcessed = result })
+        whenever(loop.lastRunStatus).thenReturn("Pump is busy")
+
+        sut = createViewModel()
+
+        assertThat(sut.uiState.value.algorithmReasoning).isEqualTo("Pump is busy")
+    }
+
+    /**
+     * The pill shows the reason itself, so the overview state has to carry it apart from the
+     * reasoning text. A client has no local loop run and must not claim the loop stopped.
+     */
+    @Test
+    fun `the stopped reason is carried for the pill and left empty on a client`() {
+        whenever(config.AAPSCLIENT).thenReturn(false)
+        whenever(loop.lastRunStatus).thenReturn("Pump is busy")
+
+        sut = createViewModel()
+        assertThat(sut.uiState.value.loopStoppedReason).isEqualTo("Pump is busy")
+
+        whenever(config.AAPSCLIENT).thenReturn(true)
+        sut = createViewModel()
+        assertThat(sut.uiState.value.loopStoppedReason).isNull()
+    }
+
     @Test
     fun `algorithm reasoning uses the client device status result`() {
         val result = mock<APSResult> {
@@ -306,6 +341,35 @@ internal class MainViewModelTest {
 
         whenever(config.platform).thenReturn(AppPlatform.Desktop)
         assertThat(sut.showBatteryHelp).isFalse()
+    }
+
+    /**
+     * The loop pill used to show the age the view model was built with: a client has no local loop
+     * run, so the age only became right after the app was force closed. The newest of the local
+     * run, the device status from the master and the stored value is used now.
+     */
+    @Test
+    fun `last loop age follows the device status on a client`() {
+        sut.viewModelScope.cancel()
+        val main = StandardTestDispatcher()
+        whenever(config.AAPSCLIENT).thenReturn(true)
+        whenever(config.initProgressFlow).thenReturn(MutableStateFlow(InitProgress()))
+        whenever(rxBus.toFlow(any<KClass<Event>>())).thenReturn(emptyFlow())
+        whenever(quickWizard.list()).thenReturn(arrayListOf())
+        whenever(dateUtil.now()).thenReturn(10_000L)
+        whenever(preferences.get(LongNonKey.LastLoopRunTimestamp)).thenReturn(4_000L)
+        whenever(processedDeviceStatusData.openApsTimestamp).thenReturn(4_000L)
+
+        val viewModel = createViewModel()
+        main.scheduler.runCurrent()
+        assertThat(viewModel.uiState.value.lastLoopAgeMillis).isEqualTo(6_000L)
+
+        // A newer loop run reaches the client as device status, without an app restart.
+        whenever(processedDeviceStatusData.openApsTimestamp).thenReturn(9_000L)
+        main.scheduler.advanceTimeBy(31_000L)
+        main.scheduler.runCurrent()
+        assertThat(viewModel.uiState.value.lastLoopAgeMillis).isEqualTo(1_000L)
+        viewModel.viewModelScope.cancel()
     }
 
     /**

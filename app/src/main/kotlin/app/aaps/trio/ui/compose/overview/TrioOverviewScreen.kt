@@ -65,6 +65,7 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -192,6 +193,7 @@ fun TrioOverviewScreen(
         runningModeSceneManaged = runningModeSceneManaged,
         lastLoopAgeMillis = lastLoopAgeMillis,
         algorithmReasoning = algorithmReasoning,
+        loopStoppedReason = loopStoppedReason,
         smbEnabled = smbEnabled,
         tbrState = tbrState,
         calcProgress = calcProgress,
@@ -204,8 +206,6 @@ fun TrioOverviewScreen(
         onNavigate = onNavigate,
         onTbrChipClick = onTbrChipClick,
         onIobChipClick = onIobChipClick,
-        onBgSourceClick = onBgSourceClick,
-        sensorInfo = shownSensorInfo,
         onSensorInfoClick = { showSensorSheet = true },
         paddingValues = paddingValues,
         activeSceneState = activeSceneState,
@@ -286,6 +286,7 @@ private fun TrioOverviewContent(
     runningModeSceneManaged: Boolean,
     lastLoopAgeMillis: Long?,
     algorithmReasoning: String?,
+    loopStoppedReason: String?,
     smbEnabled: Boolean,
     tbrState: TbrState,
     calcProgress: Int,
@@ -298,8 +299,6 @@ private fun TrioOverviewContent(
     onNavigate: (NavigationRequest) -> Unit,
     onTbrChipClick: () -> Unit,
     onIobChipClick: () -> Unit,
-    onBgSourceClick: () -> Unit,
-    sensorInfo: SensorInfo,
     onSensorInfoClick: () -> Unit,
     paddingValues: PaddingValues,
     activeSceneState: ActiveSceneState?,
@@ -431,6 +430,7 @@ private fun TrioOverviewContent(
                                 runningMode = runningMode,
                                 runningModeText = runningModeText,
                                 lastLoopAgeMillis = lastLoopAgeMillis,
+                                loopStoppedReason = loopStoppedReason,
                                 predictedText = predictedText,
                                 onClick = { showPredictionInfo = true },
                                 modifier = Modifier.weight(1f),
@@ -651,6 +651,7 @@ private fun TrioOverviewScreenPreview() {
             runningModeSceneManaged = false,
             lastLoopAgeMillis = 45_000L,
             algorithmReasoning = "Glucose is predicted to stay in range. No temp basal change is needed.",
+            loopStoppedReason = null,
             smbEnabled = true,
             tbrState = TbrState.HIGH,
             calcProgress = 65,
@@ -683,12 +684,6 @@ private fun TrioOverviewScreenPreview() {
             onNavigate = {},
             onTbrChipClick = {},
             onIobChipClick = {},
-            onBgSourceClick = {},
-            sensorInfo = SensorInfo(
-                sourceName = "xDrip",
-                startedAt = 1_779_000_000_000L,
-                batteryLevel = 80
-            ),
             onSensorInfoClick = {},
             paddingValues = PaddingValues(),
             activeSceneState = null,
@@ -976,6 +971,7 @@ private fun LoopStatusAndPrediction(
     runningMode: RM.Mode,
     runningModeText: String,
     lastLoopAgeMillis: Long?,
+    loopStoppedReason: String?,
     predictedText: String,
     onClick: () -> Unit,
     modifier: Modifier = Modifier
@@ -991,6 +987,7 @@ private fun LoopStatusAndPrediction(
             mode = runningMode,
             modeDescription = runningModeText,
             lastLoopAgeMillis = lastLoopAgeMillis,
+            loopStoppedReason = loopStoppedReason,
         )
         PredictionText(
             predictedText = predictedText,
@@ -1003,12 +1000,17 @@ private fun TrioLoopStatusPill(
     mode: RM.Mode,
     modeDescription: String,
     lastLoopAgeMillis: Long?,
+    loopStoppedReason: String?,
     modifier: Modifier = Modifier
 ) {
     val colors = AapsTheme.generalColors
     val ageMinutes = lastLoopAgeMillis?.milliseconds?.inWholeMinutes
+    // A loop that stopped early is a warning even while the age is still small, because the age
+    // will keep growing until the reason is cleared.
+    val stoppedReason = loopStoppedReason?.takeIf { it.isNotBlank() }
     val color = when {
         !mode.isClosedLoopOrLgs() && mode != RM.Mode.RESUME -> mode.loopColor(colors)
+        stoppedReason != null                                -> colors.statusWarning
         ageMinutes == null                                    -> MaterialTheme.colorScheme.onSurfaceVariant
         ageMinutes < 5L                                      -> colors.statusNormal
         ageMinutes < 10L                                     -> colors.statusWarning
@@ -1046,6 +1048,23 @@ private fun TrioLoopStatusPill(
                     color = color,
                     style = MaterialTheme.typography.labelLarge
                 )
+                stoppedReason?.let { reason ->
+                    Icon(
+                        imageVector = Icons.Default.Warning,
+                        // The pill has room for a short label only, so the full reason is read out
+                        // here and spelled out in the loop reasoning sheet behind the pill.
+                        contentDescription = reason,
+                        tint = color,
+                        modifier = Modifier.size(AapsSpacing.chipIconSize)
+                    )
+                    Text(
+                        text = stringResource(R.string.trio_loop_stopped),
+                        color = color,
+                        style = MaterialTheme.typography.labelMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
             }
         }
     }

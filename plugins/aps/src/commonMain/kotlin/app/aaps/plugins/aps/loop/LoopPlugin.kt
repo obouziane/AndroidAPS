@@ -163,6 +163,16 @@ class LoopPlugin(
     override var lastRun: LastRun? = null
     override var closedLoopEnabled: Constraint<Boolean>? = null
 
+    // Volatile: written inside invoke() on whichever worker thread ran the loop, read by the
+    // overview on the main thread.
+    @Volatile override var lastRunStatus: String? = null
+
+    // How many runs in a row ended with the text now in lastRunStatus. The notification card waits
+    // for the second one: a loop run is skipped for a single cycle quite normally - the queue is
+    // busy while a bolus is given, for example - and a card that appears and clears again every
+    // time the user boluses is noise. The overview status text is NOT delayed, only the card.
+    private var repeatedStatusRuns = 0
+
     // Debounces the device-status upload. Was a Handler on its own HandlerThread; a Job on the app
     // scope does the same and is the only part of this class that was ever Android.
     private var deviceStatusJob: Job? = null
@@ -554,30 +564,36 @@ class LoopPlugin(
             // a mode that matches the pump state and the current constraints.
             runningModePreCheck()
             if (runningMode() == RM.Mode.DISABLED_LOOP) {
-                val message = rh.gs(CoreUiStrings.loop_disabled_by_user)
-                aapsLogger.debug(LTag.APS, message)
-                rxBus.send(EventLoopSetLastRunGui(message))
+                reportLoopStopped(rh.gs(CoreUiStrings.loop_disabled_by_user))
                 return@withContext
             }
             val pump = activePlugin.activePump
             var apsResult: APSResult? = null
-            if (!isEnabled()) return@withContext
+            if (!isEnabled()) {
+                reportLoopStopped(rh.gs(CoreUiStrings.loop_disabled_by_user))
+                return@withContext
+            }
             val profile = profileFunction.getProfile()
             if (profile == null || !profileFunction.isProfileValid("Loop")) {
-                aapsLogger.debug(LTag.APS, rh.gs(CoreUiStrings.no_profile_set))
-                rxBus.send(EventLoopSetLastRunGui(rh.gs(CoreUiStrings.no_profile_set)))
+                reportLoopStopped(rh.gs(CoreUiStrings.no_profile_set))
                 return@withContext
             }
 
             if (!isEmptyQueue()) {
-                aapsLogger.debug(LTag.APS, rh.gs(CoreUiStrings.pump_busy))
-                rxBus.send(EventLoopSetLastRunGui(rh.gs(CoreUiStrings.pump_busy)))
+                reportLoopStopped(rh.gs(CoreUiStrings.pump_busy))
                 return@withContext
             }
 
             // Check if pump info is loaded
-            if (ch.fromPump(pump.baseBasalRate) < 0.01) return@withContext
-            val usedAPS = activePlugin.activeAPS ?: return@withContext
+            if (ch.fromPump(pump.baseBasalRate) < 0.01) {
+                reportLoopStopped(rh.gs(CoreUiStrings.pump_not_initialized_profile_not_set))
+                return@withContext
+            }
+            val usedAPS = activePlugin.activeAPS
+            if (usedAPS == null) {
+                reportLoopStopped(rh.gs(ApsStrings.no_aps_selected))
+                return@withContext
+            }
             if (usedAPS.isEnabled()) {
                 usedAPS.invoke(initiator, tempBasalFallback)
                 apsResult = usedAPS.lastAPSResult
@@ -585,7 +601,7 @@ class LoopPlugin(
 
             // Check if we have any result
             if (apsResult == null) {
-                rxBus.send(EventLoopSetLastRunGui(rh.gs(ApsStrings.no_aps_selected)))
+                reportLoopStopped(rh.gs(ApsStrings.no_aps_selected))
                 return@withContext
             }
 
@@ -629,8 +645,7 @@ class LoopPlugin(
                 scheduleBuildAndStoreDeviceStatus("APS result")
 
                 if (runningMode().pausesLoopExecution()) {
-                    aapsLogger.debug(LTag.APS, rh.gs(InterfacesStrings.loopsuspended))
-                    rxBus.send(EventLoopSetLastRunGui(rh.gs(InterfacesStrings.loopsuspended)))
+                    reportLoopStopped(rh.gs(InterfacesStrings.loopsuspended))
                     return@withContext
                 }
                 // Store reasons
@@ -763,12 +778,44 @@ class LoopPlugin(
                         dismissSuggestion()
                     }
                 }
+                reportLoopFinished()
                 rxBus.send(EventLoopUpdateGui())
             }
         } finally {
             invokeMutex.unlock()
             aapsLogger.debug(LTag.APS, "invoke end")
         }
+    }
+
+    /**
+     * Records why this run stopped before it reached the pump, and tells the user.
+     *
+     * Three things happen here. The Loop tab gets the text as before. [lastRunStatus] holds it so
+     * the overview can say why nothing new has arrived instead of showing the reason of a much
+     * older run. And a notification card is posted, so the user does not have to open the Loop tab
+     * to find out that the loop has stopped.
+     *
+     * The card waits for the SECOND run in a row with the same reason - see [repeatedStatusRuns].
+     * [EventLoopUpdateGui] is sent every time, so the overview text itself is never delayed.
+     */
+    private fun reportLoopStopped(message: String) {
+        aapsLogger.debug(LTag.APS, message)
+        if (lastRunStatus == message) repeatedStatusRuns++
+        else {
+            lastRunStatus = message
+            repeatedStatusRuns = 1
+        }
+        rxBus.send(EventLoopSetLastRunGui(message))
+        if (repeatedStatusRuns == 2) notificationManager.post(NotificationId.LOOP_NOT_RUNNING, message)
+        rxBus.send(EventLoopUpdateGui())
+    }
+
+    /** Clears whatever [reportLoopStopped] left behind, because a run has now finished. */
+    private fun reportLoopFinished() {
+        if (lastRunStatus == null) return
+        lastRunStatus = null
+        repeatedStatusRuns = 0
+        notificationManager.dismiss(NotificationId.LOOP_NOT_RUNNING)
     }
 
     override fun disableCarbSuggestions(durationMinutes: Int) {
