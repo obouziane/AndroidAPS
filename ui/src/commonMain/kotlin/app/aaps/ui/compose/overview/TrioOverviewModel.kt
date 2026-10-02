@@ -26,6 +26,7 @@ data class TrioOverviewModel(
     val runningModeProgress: Float,
     val runningModeSceneManaged: Boolean,
     val lastLoopAgeMillis: Long?,
+    val isLooping: Boolean,
     val algorithmReasoning: String?,
     val loopStoppedReason: String?,
     val smbEnabled: Boolean,

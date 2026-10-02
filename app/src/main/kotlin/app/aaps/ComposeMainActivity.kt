@@ -480,7 +480,10 @@ class ComposeMainActivity : MetroAppCompatActivity() {
                             onWizardClick = onWizardClick
                         )
                     },
-                    trioOverview = trioUi::overview,
+                    // Must be a lambda, not `trioUi::overview`. Compose does not redraw a composable
+                    // passed as a function reference when its argument changes, so the loop status,
+                    // profile and running mode stayed frozen until the app was reopened.
+                    trioOverview = { model -> trioUi.overview(model) },
                     onAboutDialogDismiss = { mainViewModel.setShowAboutDialog(false) },
                     onOpenBatteryHelp = if (mainViewModel.showBatteryHelp) {
                         { mainViewModel.openBatteryHelp() }

@@ -1010,6 +1010,42 @@ class LoopPluginTest : TestBaseWithProfile() {
     }
 
     /**
+     * The overview shows "Looping" from the moment a run passes the "loop is off" checks until it
+     * returns, also when it stops early.
+     */
+    @Test
+    fun `isRunning is true only while a run is in progress`() = runTest {
+        setupForPreCheck()
+        mockCurrentMode(RM(mode = RM.Mode.CLOSED_LOOP, timestamp = dateUtil.now(), duration = 0))
+        var runningDuringRun = false
+        profileFunction.stub {
+            onBlocking { getProfile() } doSuspendableAnswer {
+                runningDuringRun = loopPlugin.isRunning.value
+                null
+            }
+        }
+        assertThat(loopPlugin.isRunning.value).isFalse()
+
+        loopPlugin.invoke("test", allowNotification = false)
+
+        assertThat(runningDuringRun).isTrue()
+        assertThat(loopPlugin.isRunning.value).isFalse()
+    }
+
+    /** A disabled loop never shows "Looping". */
+    @Test
+    fun `a disabled loop is never shown as running`() = runTest {
+        setupForPreCheck()
+        mockCurrentMode(RM(mode = RM.Mode.DISABLED_LOOP, timestamp = dateUtil.now(), duration = 0))
+        whenever(constraintChecker.isLoopInvocationAllowed()).thenReturn(ConstraintObject(false, aapsLogger))
+
+        loopPlugin.invoke("test", allowNotification = false)
+
+        verify(profileFunction, never()).getProfile()
+        assertThat(loopPlugin.isRunning.value).isFalse()
+    }
+
+    /**
      * The card waits for the second run with the same reason. A single skipped cycle is normal -
      * the queue is busy while a bolus is given - and a card that appears and clears again on every
      * bolus is noise.

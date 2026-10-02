@@ -192,6 +192,7 @@ fun TrioOverviewScreen(
         runningModeProgress = runningModeProgress,
         runningModeSceneManaged = runningModeSceneManaged,
         lastLoopAgeMillis = lastLoopAgeMillis,
+        isLooping = isLooping,
         algorithmReasoning = algorithmReasoning,
         loopStoppedReason = loopStoppedReason,
         smbEnabled = smbEnabled,
@@ -285,6 +286,7 @@ private fun TrioOverviewContent(
     runningModeProgress: Float,
     runningModeSceneManaged: Boolean,
     lastLoopAgeMillis: Long?,
+    isLooping: Boolean,
     algorithmReasoning: String?,
     loopStoppedReason: String?,
     smbEnabled: Boolean,
@@ -430,6 +432,7 @@ private fun TrioOverviewContent(
                                 runningMode = runningMode,
                                 runningModeText = runningModeText,
                                 lastLoopAgeMillis = lastLoopAgeMillis,
+                                isLooping = isLooping,
                                 loopStoppedReason = loopStoppedReason,
                                 predictedText = predictedText,
                                 onClick = { showPredictionInfo = true },
@@ -650,6 +653,7 @@ private fun TrioOverviewScreenPreview() {
             runningModeProgress = 0f,
             runningModeSceneManaged = false,
             lastLoopAgeMillis = 45_000L,
+            isLooping = false,
             algorithmReasoning = "Glucose is predicted to stay in range. No temp basal change is needed.",
             loopStoppedReason = null,
             smbEnabled = true,
@@ -971,6 +975,7 @@ private fun LoopStatusAndPrediction(
     runningMode: RM.Mode,
     runningModeText: String,
     lastLoopAgeMillis: Long?,
+    isLooping: Boolean,
     loopStoppedReason: String?,
     predictedText: String,
     onClick: () -> Unit,
@@ -987,6 +992,7 @@ private fun LoopStatusAndPrediction(
             mode = runningMode,
             modeDescription = runningModeText,
             lastLoopAgeMillis = lastLoopAgeMillis,
+            isLooping = isLooping,
             loopStoppedReason = loopStoppedReason,
         )
         PredictionText(
@@ -1000,6 +1006,7 @@ private fun TrioLoopStatusPill(
     mode: RM.Mode,
     modeDescription: String,
     lastLoopAgeMillis: Long?,
+    isLooping: Boolean,
     loopStoppedReason: String?,
     modifier: Modifier = Modifier
 ) {
@@ -1007,9 +1014,12 @@ private fun TrioLoopStatusPill(
     val ageMinutes = lastLoopAgeMillis?.milliseconds?.inWholeMinutes
     // A loop that stopped early is a warning even while the age is still small, because the age
     // will keep growing until the reason is cleared.
-    val stoppedReason = loopStoppedReason?.takeIf { it.isNotBlank() }
+    // While a run is in progress the reason from the previous run is not shown: the new run may
+    // clear it.
+    val stoppedReason = loopStoppedReason?.takeIf { it.isNotBlank() && !isLooping }
     val color = when {
         !mode.isClosedLoopOrLgs() && mode != RM.Mode.RESUME -> mode.loopColor(colors)
+        isLooping                                            -> colors.statusNormal
         stoppedReason != null                                -> colors.statusWarning
         ageMinutes == null                                    -> MaterialTheme.colorScheme.onSurfaceVariant
         ageMinutes < 5L                                      -> colors.statusNormal
@@ -1037,17 +1047,30 @@ private fun TrioLoopStatusPill(
                 horizontalArrangement = Arrangement.spacedBy(AapsSpacing.medium),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(
-                    imageVector = mode.toLoopStatusIcon(),
-                    contentDescription = modeDescription,
-                    tint = color,
-                    modifier = Modifier.size(AapsSpacing.chipIconSize)
-                )
-                Text(
-                    text = ageText,
-                    color = color,
-                    style = MaterialTheme.typography.labelLarge
-                )
+                if (isLooping) {
+                    CircularProgressIndicator(
+                        color = color,
+                        strokeWidth = AapsSpacing.extraSmall,
+                        modifier = Modifier.size(AapsSpacing.chipIconSize)
+                    )
+                    Text(
+                        text = stringResource(R.string.trio_loop_looping),
+                        color = color,
+                        style = MaterialTheme.typography.labelLarge
+                    )
+                } else {
+                    Icon(
+                        imageVector = mode.toLoopStatusIcon(),
+                        contentDescription = modeDescription,
+                        tint = color,
+                        modifier = Modifier.size(AapsSpacing.chipIconSize)
+                    )
+                    Text(
+                        text = ageText,
+                        color = color,
+                        style = MaterialTheme.typography.labelLarge
+                    )
+                }
                 stoppedReason?.let { reason ->
                     Icon(
                         imageVector = Icons.Default.Warning,

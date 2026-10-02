@@ -159,6 +159,7 @@ fun MainScreen(
                         runningModeProgress = uiState.runningModeProgress,
                         runningModeRecordId = uiState.runningModeRecordId,
                         lastLoopAgeMillis = uiState.lastLoopAgeMillis,
+                        isLooping = uiState.isLooping,
                         algorithmReasoning = uiState.algorithmReasoning,
                         loopStoppedReason = uiState.loopStoppedReason,
                         tbrState = uiState.tbrState,

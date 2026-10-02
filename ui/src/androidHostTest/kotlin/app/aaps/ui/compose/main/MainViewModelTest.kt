@@ -56,9 +56,11 @@ import app.aaps.core.ui.compose.navigation.NavigationRequest
 import app.aaps.ui.compose.quickLaunch.QuickLaunchResolver
 import com.google.common.truth.Truth.assertThat
 import kotlin.reflect.KClass
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -74,6 +76,7 @@ import org.junit.jupiter.api.Test
 import org.mockito.Mock
 import org.mockito.MockitoAnnotations
 import org.mockito.kotlin.any
+import org.mockito.kotlin.doSuspendableAnswer
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.stub
 import org.mockito.kotlin.whenever
@@ -113,6 +116,7 @@ internal class MainViewModelTest {
     @Mock private lateinit var visibilityContext: VisibilityContext
 
     private lateinit var sut: MainViewModel
+    private val loopRunning = MutableStateFlow(false)
 
     @BeforeEach
     fun setUp() {
@@ -133,6 +137,7 @@ internal class MainViewModelTest {
         whenever(overviewDataCache.runningModeFlow).thenReturn(MutableStateFlow<RunningModeDisplayData?>(null))
         whenever(overviewDataCache.tbrFlow).thenReturn(MutableStateFlow<TbrDisplayData?>(null))
         whenever(quickWizard.changes).thenReturn(MutableStateFlow(0))
+        whenever(loop.isRunning).thenReturn(loopRunning)
 
         // Active scene state read as fields (activeSceneState + sceneExpired.map).
         whenever(activeSceneManager.activeSceneState).thenReturn(MutableStateFlow<ActiveSceneState?>(null))
@@ -369,6 +374,91 @@ internal class MainViewModelTest {
         main.scheduler.advanceTimeBy(31_000L)
         main.scheduler.runCurrent()
         assertThat(viewModel.uiState.value.lastLoopAgeMillis).isEqualTo(1_000L)
+        viewModel.viewModelScope.cancel()
+    }
+
+    /**
+     * A CancellationException from a call inside the chip build (a cancelled calculation, say) used
+     * to end the chip flow without a crash, so the loop age stayed frozen until the app was force
+     * closed. The flow must keep going and the loop age must still follow new loop runs.
+     */
+    @Test
+    fun `last loop age keeps updating when a chip build fails`() {
+        sut.viewModelScope.cancel()
+        val main = StandardTestDispatcher()
+        whenever(config.AAPSCLIENT).thenReturn(true)
+        whenever(config.initProgressFlow).thenReturn(MutableStateFlow(InitProgress()))
+        whenever(rxBus.toFlow(any<KClass<Event>>())).thenReturn(emptyFlow())
+        whenever(quickWizard.list()).thenThrow(CancellationException("calculation stopped"))
+        whenever(dateUtil.now()).thenReturn(10_000L)
+        whenever(preferences.get(LongNonKey.LastLoopRunTimestamp)).thenReturn(4_000L)
+        whenever(processedDeviceStatusData.openApsTimestamp).thenReturn(4_000L)
+
+        val viewModel = createViewModel()
+        main.scheduler.runCurrent()
+        assertThat(viewModel.uiState.value.lastLoopAgeMillis).isEqualTo(6_000L)
+
+        whenever(processedDeviceStatusData.openApsTimestamp).thenReturn(9_000L)
+        main.scheduler.advanceTimeBy(31_000L)
+        main.scheduler.runCurrent()
+        assertThat(viewModel.uiState.value.lastLoopAgeMillis).isEqualTo(1_000L)
+        viewModel.viewModelScope.cancel()
+    }
+
+    /**
+     * A chip build that waits forever throws nothing and logs nothing. It used to block every later
+     * build, so the chips and the loop age froze silently. The time limit must still let the loop
+     * age move, and the next tick must start a fresh build.
+     */
+    @Test
+    fun `last loop age keeps updating when a chip build never finishes`() {
+        sut.viewModelScope.cancel()
+        val main = StandardTestDispatcher()
+        whenever(config.AAPSCLIENT).thenReturn(true)
+        whenever(config.initProgressFlow).thenReturn(MutableStateFlow(InitProgress()))
+        whenever(rxBus.toFlow(any<KClass<Event>>())).thenReturn(emptyFlow())
+        whenever(quickWizard.list()).thenReturn(arrayListOf())
+        whenever(dateUtil.now()).thenReturn(10_000L)
+        whenever(preferences.get(LongNonKey.LastLoopRunTimestamp)).thenReturn(4_000L)
+        whenever(processedDeviceStatusData.openApsTimestamp).thenReturn(4_000L)
+        profileFunction.stub {
+            onBlocking { getProfile() } doSuspendableAnswer { awaitCancellation() }
+        }
+
+        val viewModel = createViewModel()
+        main.scheduler.advanceTimeBy(11_000L)
+        main.scheduler.runCurrent()
+        assertThat(viewModel.uiState.value.lastLoopAgeMillis).isEqualTo(6_000L)
+
+        whenever(dateUtil.now()).thenReturn(40_000L)
+        whenever(processedDeviceStatusData.openApsTimestamp).thenReturn(39_000L)
+        main.scheduler.advanceTimeBy(31_000L)
+        main.scheduler.runCurrent()
+        assertThat(viewModel.uiState.value.lastLoopAgeMillis).isEqualTo(1_000L)
+        viewModel.viewModelScope.cancel()
+    }
+
+    /** The pill shows "Looping" only while the loop plugin says a run is in progress. */
+    @Test
+    fun `isLooping follows the loop run state`() {
+        sut.viewModelScope.cancel()
+        val main = StandardTestDispatcher()
+        whenever(config.initProgressFlow).thenReturn(MutableStateFlow(InitProgress()))
+        whenever(rxBus.toFlow(any<KClass<Event>>())).thenReturn(emptyFlow())
+        whenever(quickWizard.list()).thenReturn(arrayListOf())
+        whenever(dateUtil.now()).thenReturn(10_000L)
+
+        val viewModel = createViewModel()
+        main.scheduler.runCurrent()
+        assertThat(viewModel.uiState.value.isLooping).isFalse()
+
+        loopRunning.value = true
+        main.scheduler.runCurrent()
+        assertThat(viewModel.uiState.value.isLooping).isTrue()
+
+        loopRunning.value = false
+        main.scheduler.runCurrent()
+        assertThat(viewModel.uiState.value.isLooping).isFalse()
         viewModel.viewModelScope.cancel()
     }
 

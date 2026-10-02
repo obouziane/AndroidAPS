@@ -84,6 +84,9 @@ import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.onEach
@@ -166,6 +169,9 @@ class LoopPlugin(
     // Volatile: written inside invoke() on whichever worker thread ran the loop, read by the
     // overview on the main thread.
     @Volatile override var lastRunStatus: String? = null
+
+    private val _isRunning = MutableStateFlow(false)
+    override val isRunning: StateFlow<Boolean> = _isRunning.asStateFlow()
 
     // How many runs in a row ended with the text now in lastRunStatus. The notification card waits
     // for the second one: a loop run is skipped for a single cycle quite normally - the queue is
@@ -573,6 +579,9 @@ class LoopPlugin(
                 reportLoopStopped(rh.gs(CoreUiStrings.loop_disabled_by_user))
                 return@withContext
             }
+            // Set only after the cheap "loop is off" checks, so a disabled loop never shows
+            // "Looping" on the overview. Cleared in the finally block below.
+            _isRunning.value = true
             val profile = profileFunction.getProfile()
             if (profile == null || !profileFunction.isProfileValid("Loop")) {
                 reportLoopStopped(rh.gs(CoreUiStrings.no_profile_set))
@@ -782,6 +791,7 @@ class LoopPlugin(
                 rxBus.send(EventLoopUpdateGui())
             }
         } finally {
+            _isRunning.value = false
             invokeMutex.unlock()
             aapsLogger.debug(LTag.APS, "invoke end")
         }

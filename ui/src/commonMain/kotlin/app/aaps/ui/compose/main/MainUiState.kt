@@ -41,6 +41,8 @@ data class MainUiState(
     val runningModeProgress: Float = 0f, // 0-1 progress for temporary modes
     val runningModeRecordId: Long = 0, // DB record ID (for scene override detection)
     val lastLoopAgeMillis: Long? = null,
+    // True while a loop run is in progress. The pill shows "Looping" instead of the age.
+    val isLooping: Boolean = false,
     val algorithmReasoning: String? = null,
     // Why the last loop run stopped early (pump busy, no profile, ...). Null when the loop ran through.
     val loopStoppedReason: String? = null,

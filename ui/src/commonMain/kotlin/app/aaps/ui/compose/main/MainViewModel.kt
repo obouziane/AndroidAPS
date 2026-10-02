@@ -111,8 +111,12 @@ import dev.zacsweers.metrox.viewmodel.ViewModelKey
 import kotlin.math.abs
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -126,6 +130,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.mapLatest
 import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.onEach
@@ -336,6 +341,13 @@ class MainViewModel(
     }
 
     // Flow-derived chip state: ticker + cache flows + expiry detection. Cold.
+    // The last built chips, so a failed build can still show a fresh loop age.
+    private var lastChipState: ChipState = initialUiState.toInitialChipState()
+
+    // The step the current chip build is in, so a build that hangs can say where in the log.
+    private var chipBuildStep = "start"
+
+    @OptIn(ExperimentalCoroutinesApi::class)
     private val chipStateFlow: Flow<ChipState> = combine(
         overviewDataCache.tempTargetFlow,
         overviewDataCache.profileFlow,
@@ -352,8 +364,45 @@ class MainViewModel(
             RuntimeState(now, lastLoop, isHydrated)
         }
     ) { ttData, profileData, rmData, tbrData, runtime ->
-        buildChipState(ttData, profileData, rmData, tbrData, runtime.now, runtime.lastLoopTimestamp, runtime.isOverviewHydrated)
+        ChipInputs(ttData, profileData, rmData, tbrData, runtime)
     }
+        // combine() runs its block one call at a time, so a build that waits forever (a lock, a
+        // database call, a calculation that never ends) blocked every later tick: the chips and
+        // the loop age froze with no exception and no log line. mapLatest drops a build that is
+        // still running when new input arrives, and the time limit makes sure something is shown
+        // even when every build hangs.
+        .mapLatest { inputs ->
+            val runtime = inputs.runtime
+            chipBuildStep = "start"
+            withTimeoutOrNull(CHIP_BUILD_TIMEOUT_MS) { buildChipStateSafely(inputs) }
+                ?: run {
+                    aapsLogger.warn(
+                        LTag.UI,
+                        "MainViewModel: Overview chips not built after $CHIP_BUILD_TIMEOUT_MS ms, stuck at step '$chipBuildStep'. Showing the last chips with a fresh loop age."
+                    )
+                    lastChipState.withLoopStatus(dateUtil.now(), runtime.lastLoopTimestamp)
+                }
+        }
+        .onEach { lastChipState = it }
+
+    private suspend fun buildChipStateSafely(inputs: ChipInputs): ChipState =
+        try {
+            buildChipState(
+                inputs.ttData, inputs.profileData, inputs.rmData, inputs.tbrData,
+                // The tick time can be up to 30 s old when a loop run or a pump event starts the
+                // build, so read the clock now.
+                dateUtil.now(), inputs.runtime.lastLoopTimestamp, inputs.runtime.isOverviewHydrated
+            )
+        } catch (e: Exception) {
+            // Without this catch, one failed build ends this flow for good, and the loop age and
+            // all chips stay frozen until the app is closed. That includes a CancellationException
+            // that comes from a call inside (for example a cancelled calculation): it ends the
+            // flow without a crash or a log line. Stop only when this build itself is cancelled
+            // (new input or the time limit).
+            currentCoroutineContext().ensureActive()
+            aapsLogger.error(LTag.UI, "MainViewModel: Failed to build overview chips at step '$chipBuildStep'", e)
+            lastChipState.withLoopStatus(dateUtil.now(), inputs.runtime.lastLoopTimestamp)
+        }
 
     private val chipState: StateFlow<ChipState> = chipStateFlow.stateIn(
         viewModelScope,
@@ -362,7 +411,7 @@ class MainViewModel(
     )
 
     /** Derived UI state. Starts immediately so the first overview frame has current values. */
-    val uiState: StateFlow<MainUiState> = combine(_eventState, chipState) { ev, chip ->
+    val uiState: StateFlow<MainUiState> = combine(_eventState, chipState, loop.isRunning) { ev, chip, isLooping ->
         MainUiState(
             isSimpleMode = ev.isSimpleMode,
             showAboutDialog = ev.showAboutDialog,
@@ -381,6 +430,7 @@ class MainViewModel(
             runningModeProgress = chip.runningModeProgress,
             runningModeRecordId = chip.runningModeRecordId,
             lastLoopAgeMillis = chip.lastLoopAgeMillis,
+            isLooping = isLooping,
             algorithmReasoning = chip.algorithmReasoning,
             loopStoppedReason = chip.loopStoppedReason,
             tbrState = chip.tbrState,
@@ -561,6 +611,25 @@ class MainViewModel(
         preferences.put(LongNonKey.LastLoopRunTimestamp, timestamp)
     }
 
+    /** The newest of the local loop run, the master's device status (client only) and [persistedLastLoop]. */
+    private fun newestLastLoopTimestamp(persistedLastLoop: Long?): Long? =
+        listOfNotNull(
+            loop.lastRun?.lastAPSRun?.takeIf { it > 0L },
+            processedDeviceStatusData.openApsTimestamp.takeIf { config.AAPSCLIENT && it > 0L },
+            persistedLastLoop
+        ).maxOrNull()
+
+    /** Returns these chips with the loop age and loop texts read again. Used when a chip build fails. */
+    private fun ChipState.withLoopStatus(now: Long, persistedLastLoop: Long?): ChipState {
+        val newestLastLoop = newestLastLoopTimestamp(persistedLastLoop)
+        newestLastLoop?.let(::cacheLastLoopTimestamp)
+        return copy(
+            lastLoopAgeMillis = newestLastLoop?.let { (now - it).coerceAtLeast(0L) },
+            algorithmReasoning = currentAlgorithmReasoning(),
+            loopStoppedReason = currentLoopStoppedReason()
+        )
+    }
+
     /**
      * Pure transform from raw cache data + tick time to ChipState. Side-effect: calls
      * cache.refresh*() when a row's `timestamp + duration` has passed, since DB-change
@@ -578,6 +647,7 @@ class MainViewModel(
         // Detect expired chips and schedule a cache refresh. Duration >= 30 days is
         // effectively permanent (e.g. loop disabled uses Int.MAX_VALUE minutes, or scene
         // permanent TT uses Long.MAX_VALUE — avoid Long-overflow in expiry math).
+        chipBuildStep = "expiry checks"
         val ttIsFinite = ttData != null && ttData.state == TempTargetState.ACTIVE
             && ttData.duration > 0 && ttData.duration < T.days(30).msecs()
         val ttExpired = ttIsFinite && now >= ttData.timestamp + ttData.duration
@@ -648,6 +718,7 @@ class MainViewModel(
             }
         } else ""
 
+        chipBuildStep = "pump status"
         val liveReservoirUnits = profileFunction.getProfile()?.let { profile ->
             activePlugin.activePump.reservoirLevel.value.iU(profile.insulinConcentration())
         }
@@ -658,13 +729,11 @@ class MainViewModel(
         // the newest one and store it, so the pill does not keep an old age until the app is
         // force closed - a client has no local loop run at all, and its device status only
         // reached the pill when the view model was built.
-        val newestLastLoop = listOfNotNull(
-            loop.lastRun?.lastAPSRun?.takeIf { it > 0L },
-            processedDeviceStatusData.openApsTimestamp.takeIf { config.AAPSCLIENT && it > 0L },
-            persistedLastLoop
-        ).maxOrNull()
+        chipBuildStep = "loop status"
+        val newestLastLoop = newestLastLoopTimestamp(persistedLastLoop)
         newestLastLoop?.let(::cacheLastLoopTimestamp)
 
+        chipBuildStep = "quick wizard"
         val liveState = ChipState(
             isProfileLoaded = profileData?.isLoaded ?: cachedOverviewStatus.profileName.isNotEmpty(),
             profileName = profileData?.let { profileText } ?: cachedOverviewStatus.profileName,
@@ -694,6 +763,7 @@ class MainViewModel(
             reservoirUnits = if (isOverviewHydrated) liveReservoirUnits else cachedOverviewStatus.reservoirUnits,
             quickWizardItems = computeQuickWizardItems(rmData?.mode)
         )
+        chipBuildStep = "cache status"
         if (isOverviewHydrated) {
             cacheOverviewStatus(
                 state = liveState,
@@ -1318,6 +1388,17 @@ private fun MainUiState.toInitialChipState() = ChipState(
     pumpEndTimeMillis = pumpEndTimeMillis,
     reservoirUnits = reservoirUnits
 )
+
+private data class ChipInputs(
+    val ttData: TempTargetDisplayData?,
+    val profileData: ProfileDisplayData?,
+    val rmData: RunningModeDisplayData?,
+    val tbrData: TbrDisplayData?,
+    val runtime: RuntimeState
+)
+
+/** How long one overview chip build may take before the last chips are shown with a fresh loop age. */
+private const val CHIP_BUILD_TIMEOUT_MS = 10_000L
 
 private data class RuntimeState(
     val now: Long,
