@@ -8,17 +8,12 @@ import app.aaps.core.interfaces.overview.SensitivityOverview
 import app.aaps.core.interfaces.overview.graph.CobGraphData
 import app.aaps.core.interfaces.overview.graph.IobGraphData
 import app.aaps.core.interfaces.overview.graph.OverviewDataCache
-<<<<<<< HEAD
 import app.aaps.core.interfaces.pump.BolusProgressData
 import app.aaps.core.interfaces.pump.BolusProgressState
 import app.aaps.core.interfaces.resources.ResourceHelper
 import app.aaps.core.interfaces.rx.bus.RxBus
 import app.aaps.core.interfaces.rx.events.EventAutosensCalculationFinished
 import app.aaps.core.interfaces.rx.events.EventLoopUpdateGui
-=======
-import app.aaps.core.interfaces.resources.ResourceHelper
-import app.aaps.core.interfaces.rx.bus.RxBus
->>>>>>> origin/o5
 import app.aaps.core.interfaces.utils.DecimalFormatter
 import com.google.common.truth.Truth.assertThat
 import kotlinx.coroutines.Dispatchers
@@ -44,10 +39,7 @@ internal class ChipsViewModelTest {
     @Mock private lateinit var config: Config
     @Mock private lateinit var persistenceLayer: PersistenceLayer
     @Mock private lateinit var sensitivityOverview: SensitivityOverview
-<<<<<<< HEAD
     @Mock private lateinit var bolusProgressData: BolusProgressData
-=======
->>>>>>> origin/o5
     @Mock private lateinit var rh: ResourceHelper
     @Mock private lateinit var decimalFormatter: DecimalFormatter
     @Mock private lateinit var rxBus: RxBus
@@ -62,16 +54,11 @@ internal class ChipsViewModelTest {
         Dispatchers.setMain(StandardTestDispatcher())
         whenever(cache.iobGraphFlow).thenReturn(MutableStateFlow(IobGraphData(emptyList(), emptyList())))
         whenever(cache.cobGraphFlow).thenReturn(MutableStateFlow(CobGraphData(emptyList(), emptyList())))
-<<<<<<< HEAD
         whenever(bolusProgressData.state).thenReturn(MutableStateFlow<BolusProgressState?>(null))
         whenever(rxBus.toFlow(EventAutosensCalculationFinished::class)).thenReturn(emptyFlow())
         whenever(rxBus.toFlow(EventLoopUpdateGui::class)).thenReturn(emptyFlow())
         whenever(cache.predictionsFlow).thenReturn(MutableStateFlow(emptyList()))
         sut = ChipsViewModel(cache, iobCobCalculator, loop, config, persistenceLayer, sensitivityOverview, bolusProgressData, rh, decimalFormatter, rxBus)
-=======
-        whenever(cache.predictionsFlow).thenReturn(MutableStateFlow(emptyList()))
-        sut =ChipsViewModel(cache, iobCobCalculator, loop, config, persistenceLayer, sensitivityOverview, rh, decimalFormatter, rxBus)
->>>>>>> origin/o5
     }
 
     @AfterEach

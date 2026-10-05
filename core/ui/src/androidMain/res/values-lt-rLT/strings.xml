@@ -110,10 +110,6 @@
     <string name="format_hours">%1$.2f val.</string>
     <string name="format_mins">%1$d min</string>
     <string name="value_with_unit" comment="A numeric value followed by its unit, when no dedicated value template exists. %1$s = value, %2$s = unit. Example: 120 mg/dl">%1$s %2$s</string>
-<<<<<<< HEAD
-=======
-    <string name="objectives">Mokymo etapai</string>
->>>>>>> origin/o5
     <string name="please_wait">Palaukite…</string>
     <string name="stop">Stop</string>
     <string name="stop_pressed">SUSTABDYTA</string>

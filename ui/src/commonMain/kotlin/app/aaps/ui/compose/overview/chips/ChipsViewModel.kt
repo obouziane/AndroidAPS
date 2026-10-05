@@ -10,10 +10,7 @@ import app.aaps.core.interfaces.db.PersistenceLayer
 import app.aaps.core.interfaces.iob.IobCobCalculator
 import app.aaps.core.interfaces.overview.SensitivityOverview
 import app.aaps.core.interfaces.overview.graph.OverviewDataCache
-<<<<<<< HEAD
 import app.aaps.core.interfaces.pump.BolusProgressData
-=======
->>>>>>> origin/o5
 import app.aaps.core.interfaces.resources.TextResolver
 import app.aaps.core.interfaces.rx.bus.RxBus
 import app.aaps.core.interfaces.rx.events.EventAutosensCalculationFinished
@@ -46,10 +43,7 @@ class ChipsViewModel(
     private val config: Config,
     private val persistenceLayer: PersistenceLayer,
     private val sensitivityOverview: SensitivityOverview,
-<<<<<<< HEAD
     private val bolusProgressData: BolusProgressData,
-=======
->>>>>>> origin/o5
     private val rh: TextResolver,
     private val decimalFormatter: DecimalFormatter,
     private val rxBus: RxBus
@@ -126,11 +120,7 @@ class ChipsViewModel(
     // own it would show the previous loop's ratio and variable ISF. Predictions are published
     // right after the loop ran on the master, and right after a device status came in on a
     // client, so they carry the fresh values on both sides.
-<<<<<<< HEAD
     val sensitivityUiState: StateFlow<SensitivityUiState> = combine(iobCobRefresh, cache.iobGraphFlow, cache.predictionsFlow) { _, _, _ ->
-=======
-    val sensitivityUiState: StateFlow<SensitivityUiState> = combine(iobCobTicker, cache.iobGraphFlow, cache.predictionsFlow) { _, _, _ ->
->>>>>>> origin/o5
         buildSensitivityUiState()
     }.stateIn(
         scope = viewModelScope,
