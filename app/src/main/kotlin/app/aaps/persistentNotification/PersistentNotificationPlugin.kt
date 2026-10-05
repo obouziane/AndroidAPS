@@ -4,17 +4,14 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.graphics.BitmapFactory
-import android.os.Build
-import androidx.car.app.connection.CarConnection
 import android.graphics.drawable.Icon
+import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationCompat.Metric
 import androidx.core.app.NotificationCompat.Metric.FixedFloat
 import androidx.core.app.NotificationCompat.Metric.FixedInt
 import androidx.core.app.NotificationCompat.MetricStyle
-import androidx.core.app.Person
 import androidx.core.app.RemoteInput
-import androidx.lifecycle.Observer
 import androidx.core.os.bundleOf
 import app.aaps.core.data.model.GlucoseUnit
 import app.aaps.core.data.model.TrendArrow
@@ -52,7 +49,6 @@ import app.aaps.core.keys.interfaces.TextRef
 import app.aaps.core.objects.extensions.apsAdjustedTargetMgdl
 import app.aaps.core.objects.extensions.round
 import app.aaps.core.ui.extensions.generateCOBString
-import app.aaps.core.ui.extensions.round
 import app.aaps.core.ui.extensions.toStringShort
 import app.aaps.core.utils.DeferredForegroundStart
 import app.aaps.plugins.main.R
@@ -68,20 +64,17 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.merge
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withContext
 import kotlin.math.round
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlin.time.Duration.Companion.seconds
 import android.app.NotificationManager as AndroidNotificationManager
 
-@Suppress("PrivatePropertyName")
+@Suppress("PrivatePropertyName", "DEPRECATION")
 // Registers itself into the every-build plugin bucket at order 0, replacing the @Binds @IntKey(0) in
 // PersistentNotificationModule.
 @ContributesIntoMap(AppScope::class, binding = binding<PluginBase>())
@@ -124,6 +117,7 @@ class PersistentNotificationPlugin(
 
     // For Android Auto
     // Intents are not declared in manifest and not consumed, this is intentionally because actually we can't do anything with
+    private val PACKAGE = "info.nightscout"
     private val READ_ACTION = "info.nightscout.androidaps.ACTION_MESSAGE_READ"
     private val REPLY_ACTION = "info.nightscout.androidaps.ACTION_MESSAGE_REPLY"
     private val CONVERSATION_ID = "conversation_id"
@@ -148,26 +142,11 @@ class PersistentNotificationPlugin(
     private var scope: CoroutineScope? = null
     private val deferredStart = DeferredForegroundStart()
     private var lastAutoNotificationContent: String = ""
-    private val carConnection by lazy { CarConnection(context) }
-    private val carConnectionObserver = Observer<Int> { connectionType ->
-        val connected = connectionType == CarConnection.CONNECTION_TYPE_PROJECTION
-        if (connected != isAndroidAutoConnected) {
-            isAndroidAutoConnected = connected
-            lastAutoNotificationContent = ""
-            scope?.launch { triggerNotificationUpdate(includeAuto = connected) }
-        }
-    }
-
-    @Volatile
-    private var isAndroidAutoConnected = false
 
     @OptIn(FlowPreview::class)
     override suspend fun onStart() {
         super.onStart()
         notificationHolder.createNotificationChannel()
-        withContext(Dispatchers.Main.immediate) {
-            carConnection.type.observeForever(carConnectionObserver)
-        }
         val newScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
         scope = newScope
         // Rare, and the first state matters: updated at once, without the debounce of the frequent events
@@ -186,7 +165,7 @@ class PersistentNotificationPlugin(
             rxBus.toFlow(EventAutosensCalculationFinished::class).map { }
         )
             .debounce(10_000L)
-            .collectResilient(newScope, aapsLogger, LTag.CORE) { triggerNotificationUpdate(includeAuto = isAndroidAutoConnected) }
+            .collectResilient(newScope, aapsLogger, LTag.CORE) { triggerNotificationUpdate(includeAuto = true) }
         /// End Android Auto
         // The missing half of this plugin's own onStop, which stops DummyService. Until now the service
         // came back only when the next rxBus event reached triggerNotificationUpdate, so after a stop and
@@ -198,10 +177,6 @@ class PersistentNotificationPlugin(
     }
 
     override suspend fun onStop() {
-        withContext(Dispatchers.Main.immediate) {
-            carConnection.type.removeObserver(carConnectionObserver)
-        }
-        isAndroidAutoConnected = false
         scope?.cancel()
         scope = null
         deferredStart.cancel()
@@ -245,24 +220,23 @@ class PersistentNotificationPlugin(
         var bgStatusChipText: String? = null
         var bgMetric: Metric? = null
         var metricValue: Metric.MetricValue? = null
-        var androidAutoReplyAction: NotificationCompat.Action? = null
-        var androidAutoReadAction: NotificationCompat.Action? = null
+        var unreadConversationBuilder: NotificationCompat.CarExtender.UnreadConversation.Builder? = null
         if (profileFunction.isProfileValid("Notification")) {
             val lastBG = iobCobCalculator.ads.lastBg()
             val glucoseStatus = glucoseStatusProvider.glucoseStatusData
             val units = profileFunction.getUnits()
             if (lastBG != null) {
-                val bgValueText = profileUtil.fromMgdlToStringInUnits(lastBG.recalculated)
+                bgStatusChipText = profileUtil.fromMgdlToStringInUnits(lastBG.recalculated)
                 val fromMgdlToUnits = profileUtil.fromMgdlToUnits(lastBG.recalculated)
                 metricValue = if (units == GlucoseUnit.MMOL) {
                     FixedFloat(
                         fromMgdlToUnits.round(1).toFloat(),
-                        units.displayLabel
+                        null // unit
                     )
                 } else {
                     FixedInt(
                         fromMgdlToUnits.toInt(),
-                        units.displayLabel
+                        null // unit
                     )
                 }
                 // Show an arrow only when there really is one. This used to fall back to FLAT,
@@ -273,15 +247,13 @@ class PersistentNotificationPlugin(
                 val trendSymbol = trendCalculator.getTrendArrow(iobCobCalculator.ads)
                     ?.takeIf { it != TrendArrow.NONE && it != TrendArrow.TRIPLE_UP && it != TrendArrow.TRIPLE_DOWN }
                     ?.symbol
-                bgStatusChipText = bgValueText + (trendSymbol ?: "")
-                line1 = bgValueText + (trendSymbol?.let { " $it" } ?: "")
+                line1 = bgStatusChipText + (trendSymbol?.let { " $it" } ?: "")
                 line1WithDelta = bgStatusChipText + (trendSymbol?.let { " $it" } ?: "")
                 if (glucoseStatus != null) {
                     line1 += " " + profileUtil.fromMgdlToSignedStringInUnits(glucoseStatus.delta)
                     line1WithDelta += " " + profileUtil.fromMgdlToSignedStringInUnits(glucoseStatus.delta)
                 } else {
                     line1 += " " + rh.gs(R.string.old_data)
-                    line1WithDelta += " " + rh.gs(R.string.old_data)
                 }
             } else {
                 line1 = rh.gs(app.aaps.core.ui.R.string.missed_bg_readings)
@@ -307,9 +279,60 @@ class PersistentNotificationPlugin(
                 )
             }
             line3 = profileName
+            /// For Android Auto
+            val msgReadIntent = Intent()
+                .addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES)
+                .setAction(READ_ACTION)
+                .putExtra(CONVERSATION_ID, notificationHolder.notificationID)
+                .setPackage(PACKAGE)
+            val msgReadPendingIntent = PendingIntent.getBroadcast(
+                context,
+                notificationHolder.notificationID,
+                msgReadIntent,
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            )
+            val msgReplyIntent = Intent()
+                .addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES)
+                .setAction(REPLY_ACTION)
+                .putExtra(CONVERSATION_ID, notificationHolder.notificationID)
+                .setPackage(PACKAGE)
+            val msgReplyPendingIntent = PendingIntent.getBroadcast(
+                context,
+                notificationHolder.notificationID,
+                msgReplyIntent,
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            )
+            // Build a RemoteInput for receiving voice input from devices
+            val remoteInput = RemoteInput.Builder(EXTRA_VOICE_REPLY).build()
+            // Build Android Auto message: IOB • COB • Target • Profile
+            var aaTarget = ""
+            val tempTarget = persistenceLayer.getTemporaryTargetActiveAt(dateUtil.now())
+            if (tempTarget != null) {
+                aaTarget = profileUtil.toTargetRangeString(tempTarget.lowTarget, tempTarget.highTarget, GlucoseUnit.MGDL, units) +
+                    " " + dateUtil.untilString(tempTarget.end, rh)
+            } else {
+                profileFunction.getProfile()?.let { profile ->
+                    val adjustedTarget = profile.apsAdjustedTargetMgdl(loop, config, processedDeviceStatusData)
+                    aaTarget = if (adjustedTarget != null) {
+                        profileUtil.toTargetRangeString(adjustedTarget, adjustedTarget, GlucoseUnit.MGDL, units)
+                    } else {
+                        profileUtil.toTargetRangeString(profile.getTargetLowMgdl(), profile.getTargetHighMgdl(), GlucoseUnit.MGDL, units)
+                    }
+                }
+            }
+            val aaMsg = decimalFormatter.to2Decimal(bolusIob.iob + basalIob.basaliob) + rh.gs(app.aaps.core.ui.R.string.insulin_unit_shortname) +
+                " • " + cobInfo.generateCOBString(decimalFormatter) +
+                " • " + aaTarget +
+                " • " + profileName
+            unreadConversationBuilder = NotificationCompat.CarExtender.UnreadConversation.Builder(rh.gs(config.appName))
+                .setLatestTimestamp(System.currentTimeMillis())
+                .setReadPendingIntent(msgReadPendingIntent)
+                .setReplyAction(msgReplyPendingIntent, remoteInput)
+            unreadConversationBuilder.addMessage(aaMsg)
+            /// End Android Auto
         } else {
             line1 = rh.gs(app.aaps.core.ui.R.string.no_profile_set)
-            line1WithDelta = line1
+            line1WithDelta = rh.gs(app.aaps.core.ui.R.string.no_profile_set)
         }
         val content = "$line1|$line2|$line3"
         if (includeAuto && content == lastAutoNotificationContent) return
@@ -324,70 +347,18 @@ class PersistentNotificationPlugin(
             line2 = line2
         )
         builder.setOnlyAlertOnce(true)
-        builder.setCategory(if (includeAuto) NotificationCompat.CATEGORY_MESSAGE else NotificationCompat.CATEGORY_STATUS)
+        builder.setCategory(NotificationCompat.CATEGORY_STATUS)
         builder.setSmallIcon(iconsProvider.getNotificationIcon())
         builder.setContentTitle(line1)
         if (line2 != null) builder.setContentText(line2)
         if (line3 != null) builder.setSubText(line3)
         /// Android Auto
-        if (includeAuto) {
-            val msgReadIntent = Intent()
-                .addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES)
-                .setAction(READ_ACTION)
-                .putExtra(CONVERSATION_ID, notificationHolder.notificationID)
-                .setPackage(context.packageName)
-            val msgReadPendingIntent = PendingIntent.getBroadcast(
-                context,
-                notificationHolder.notificationID,
-                msgReadIntent,
-                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        if (includeAuto && unreadConversationBuilder != null) {
+            builder.extend(
+                NotificationCompat.CarExtender()
+                    .setLargeIcon(BitmapFactory.decodeResource(context.resources, iconsProvider.getIcon()))
+                    .setUnreadConversation(unreadConversationBuilder.build())
             )
-            val msgReplyIntent = Intent()
-                .addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES)
-                .setAction(REPLY_ACTION)
-                .putExtra(CONVERSATION_ID, notificationHolder.notificationID)
-                .setPackage(context.packageName)
-            val msgReplyPendingIntent = PendingIntent.getBroadcast(
-                context,
-                notificationHolder.notificationID,
-                msgReplyIntent,
-                PendingIntent.FLAG_MUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-            )
-            // Build a RemoteInput for receiving voice input from devices
-            val remoteInput = RemoteInput.Builder(EXTRA_VOICE_REPLY).build()
-            val appPerson = Person.Builder()
-                .setName(bgStatusChipText ?: line1)
-                .setKey(context.packageName)
-                .build()
-            val devicePerson = Person.Builder()
-                .setName(bgStatusChipText ?: line1)
-                .setKey("$CONVERSATION_ID-device-user")
-                .build()
-            val androidAutoMessagingStyle = NotificationCompat.MessagingStyle(devicePerson)
-                .setConversationTitle(bgStatusChipText)
-                .setGroupConversation(false)
-                .addMessage((line1), System.currentTimeMillis(), appPerson)
-            androidAutoReplyAction = NotificationCompat.Action.Builder(
-                iconsProvider.getNotificationIcon(),
-                rh.gs(R.string.android_auto_reply),
-                msgReplyPendingIntent
-            )
-                .setSemanticAction(NotificationCompat.Action.SEMANTIC_ACTION_REPLY)
-                .setShowsUserInterface(false)
-                .addRemoteInput(remoteInput)
-                .build()
-            androidAutoReadAction = NotificationCompat.Action.Builder(
-                iconsProvider.getNotificationIcon(),
-                rh.gs(R.string.android_auto_mark_as_read),
-                msgReadPendingIntent
-            )
-                .setSemanticAction(NotificationCompat.Action.SEMANTIC_ACTION_MARK_AS_READ)
-                .setShowsUserInterface(false)
-                .build()
-            builder.setLargeIcon(BitmapFactory.decodeResource(context.resources, iconsProvider.getIcon()))
-            builder.setStyle(androidAutoMessagingStyle)
-            builder.addInvisibleAction(androidAutoReplyAction)
-            builder.addInvisibleAction(androidAutoReadAction)
         }
         /// End Android Auto
         builder.setContentIntent(notificationHolder.openAppIntent())
@@ -404,6 +375,10 @@ class PersistentNotificationPlugin(
         bgMetric: Metric?,
         line2: String?
     ) {
+        // Samsung's own system UI (One UI 7+) does not render the standard Android promoted
+        // notification below - it shows the lock-screen "Now Bar" and drawer "Live Notifications"
+        // through its own proprietary extras, so that needs to be applied separately and does not
+        // depend on the Android version gating below.
         applySamsungLiveUpdate(builder, line1WithDelta, line2)
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.BAKLAVA) return
         builder.setRequestPromotedOngoing(true)
