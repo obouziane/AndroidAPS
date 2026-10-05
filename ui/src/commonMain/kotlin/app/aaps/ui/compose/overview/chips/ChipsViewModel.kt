@@ -20,6 +20,7 @@ import app.aaps.core.interfaces.utils.DecimalFormatter
 import app.aaps.core.objects.extensions.round
 import app.aaps.core.ui.CoreUiStrings
 import app.aaps.core.ui.extensions.displayText
+import app.aaps.ui.UiStrings
 import dev.zacsweers.metro.Assisted
 import dev.zacsweers.metro.AssistedFactory
 import dev.zacsweers.metro.AssistedInject
