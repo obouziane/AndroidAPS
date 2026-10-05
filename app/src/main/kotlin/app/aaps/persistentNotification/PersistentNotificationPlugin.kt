@@ -68,6 +68,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.debounce
@@ -153,7 +154,7 @@ class PersistentNotificationPlugin(
         if (connected != isAndroidAutoConnected) {
             isAndroidAutoConnected = connected
             lastAutoNotificationContent = ""
-            triggerNotificationUpdate(includeAuto = connected)
+            scope?.launch { triggerNotificationUpdate(includeAuto = connected) }
         }
     }
 

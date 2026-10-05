@@ -12,6 +12,7 @@ import app.aaps.core.data.time.T
 import app.aaps.core.interfaces.di.PumpDriver
 import app.aaps.core.interfaces.logging.AAPSLogger
 import app.aaps.core.interfaces.logging.LTag
+import app.aaps.core.interfaces.notifications.AlarmSound
 import app.aaps.core.interfaces.notifications.NotificationId
 import app.aaps.core.interfaces.notifications.NotificationLevel
 import app.aaps.core.interfaces.notifications.NotificationManager
@@ -401,7 +402,7 @@ class OmnipodDashPumpPlugin(
                         showNotification(
                             NotificationId.OMNIPOD_POD_FAULT,
                             faultText,
-                            AlarmSound.BOLUS_ERROR
+                            sound = AlarmSound.BOLUS_ERROR
                         )
                     }
                     pumpSync.insertAnnouncement(
@@ -1557,11 +1558,17 @@ class OmnipodDashPumpPlugin(
         uiInteraction.runAlarm(message, rh.gs(app.aaps.core.ui.R.string.error))
     }
 
-    private fun showNotification(id: NotificationId, message: String, level: NotificationLevel = id.defaultLevel) {
+    private fun showNotification(
+        id: NotificationId,
+        message: String,
+        level: NotificationLevel = id.defaultLevel,
+        sound: AlarmSound? = null
+    ) {
         notificationManager.post(
             id,
             message,
-            level = level
+            level = level,
+            sound = sound
         )
     }
 
