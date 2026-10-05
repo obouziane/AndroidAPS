@@ -400,12 +400,8 @@ class OmnipodDashPumpPlugin(
                     if (!commandQueue.isCustomCommandInQueue(CommandDeactivatePod::class)) {
                         showNotification(
                             NotificationId.OMNIPOD_POD_FAULT,
-<<<<<<< HEAD
-                            it.toString()
-=======
                             faultText,
                             AlarmSound.BOLUS_ERROR
->>>>>>> origin/dev
                         )
                     }
                     pumpSync.insertAnnouncement(
@@ -1598,8 +1594,6 @@ class OmnipodDashPumpPlugin(
                     OmnipodBooleanPreferenceKey.LowReservoirAlert,
                     OmnipodIntPreferenceKey.LowReservoirAlertUnits
                 )
-<<<<<<< HEAD
-=======
             ),
             // Notifications subscreen
             PreferenceSubScreenDef(
@@ -1619,7 +1613,7 @@ class OmnipodDashPumpPlugin(
                 items = listOf(
                     DashBooleanPreferenceKey.UseBonding
                 )
->>>>>>> origin/dev
+
             )
         ),
         icon = pluginDescription.icon

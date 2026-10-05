@@ -267,11 +267,6 @@ dependencies {
             "fullImplementation"(project(it.path))
             "pumpcontrolImplementation"(project(it.path))
         }
-<<<<<<< HEAD
-=======
-
-    implementation(libs.androidx.core)
->>>>>>> origin/dev
     implementation(libs.androidx.lifecycle.process)
 
     testImplementation(project(":shared:tests"))
