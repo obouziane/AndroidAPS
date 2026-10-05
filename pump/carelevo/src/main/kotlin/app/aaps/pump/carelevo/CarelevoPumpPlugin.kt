@@ -156,7 +156,6 @@ class CarelevoPumpPlugin @Inject constructor(
         }
         .icon(IcPluginCarelevo)
         .pluginName(TextRef.AndroidRes(R.string.carelevo))
-        .shortName(TextRef.AndroidRes(R.string.carelevo_shortname))
         .description(TextRef.AndroidRes(R.string.carelevo_description)),
     ownPreferences = CarelevoBooleanPreferenceKey.entries + CarelevoIntPreferenceKey.entries + CarelevoStringNonKey.entries,
     aapsLogger, rh, preferences, commandQueue, notificationManager
