@@ -28,6 +28,11 @@
     <string name="setupwizard_aps_description">Selecione um dos algoritmos disponíveis. Eles estão ordenados do mais antigo ao mais recente. O algoritmo mais novo geralmente é mais potente. Não se esqueça de ler a documentação do OpenAPS e configurá-lo antes de usá-lo.</string>
     <string name="setupwizard_pump_waiting_for_riley_link_connection">Por favor configurar o seu RileyLink abaixo. Após selecionar um RileyLink e assim que o estado do RileyLink for \"Conectado\", será possível continuar a instalação. Isso pode levar um minuto.\n</string>
     <string name="setupwizard_pump_pump_not_initialized"><b>Nota:</b> Você pode continuar a configuração assim que a configuração da bomba estiver concluída.\n</string>
+<<<<<<< HEAD
+=======
+    <string name="startobjective">Iniciar primeiro objetivo</string>
+    <string name="open_objectives">Abrir objetivos</string>
+>>>>>>> origin/o5
     <string name="setupwizard_permissions">Permissões</string>
     <string name="setupwizard_profile_info">Crie um perfil com suas taxas basais, IC, ISF e valores de alvo. Você poderá adicionar vários perfis depois.</string>
     <string name="setupwizard_permissions_info">O AAPS precisa de acesso ao armazenamento e de permissões para funcionar corretamente. Conceda as permissões necessárias abaixo.</string>

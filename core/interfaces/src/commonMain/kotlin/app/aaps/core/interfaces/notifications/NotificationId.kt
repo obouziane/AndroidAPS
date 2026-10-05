@@ -226,6 +226,7 @@ enum class NotificationId(
     // The pump is disconnected (or a super bolus runs) in AAPS, but the zero temp basal that stops the
     // insulin is not on the pump, and sending it again did not help. The pump may still give basal
     // while the user believes it does not. Appended at the END for the same reason as above.
+<<<<<<< HEAD
     ZERO_DELIVERY_NOT_SET(URGENT, PUMP),
 
     // The loop ran but stopped before it reached the pump - no profile, no APS plugin selected, the
@@ -237,6 +238,9 @@ enum class NotificationId(
     // and several of the reasons are states the user chose. [app.aaps.core.interfaces.aps.Loop]
     // dismisses the card as soon as a run finishes.
     LOOP_NOT_RUNNING(NORMAL, LOOP);
+=======
+    ZERO_DELIVERY_NOT_SET(URGENT, PUMP);
+>>>>>>> origin/o5
 
     companion object {
 
