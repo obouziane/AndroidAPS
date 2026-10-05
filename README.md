@@ -1,15 +1,16 @@
 # Trio for Android
 
 ###  This is a fork of AAPS with a Trio inspired UI
-- AAPS: https://github.com/nightscout/AndroidAPS
+- AndroidAPS: https://github.com/nightscout/AndroidAPS
 - Trio: https://github.com/nightscout/Trio
-- JugglucoNG: https://github.com/ctqvva/JugglucoNG/
+- TrioFollower: https://github.com/t1dude/TrioFollower
 
 ### Changes
 1. Live updates to show your BG
 2. Trio style home navigation and home screen
 3. Updated statistics screen inspired by JugglucoNG
 4. Material theme
+5. AGP, insulin, carb statistics
 
 ### Screenshots
 
